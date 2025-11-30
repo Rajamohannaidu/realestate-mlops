@@ -117,3 +117,15 @@ override.tf.json
 
 # Executables (to avoid pushing .exe provider binaries)
 *.exe
+# Terraform specific files
+.terraform/
+*.tfstate
+*.tfstate.*
+.terraform.lock.hcl
+
+# Sensitive vars
+terraform.tfvars
+*.tfvars
+
+# Provider binaries
+*.exe
