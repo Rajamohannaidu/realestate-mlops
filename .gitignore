@@ -90,3 +90,5 @@ Thumbs.db
 *.pyc
 training_results.json
 backend/models/*.*"mlartifacts/" 
+".terraform/" 
+"*.exe" 
