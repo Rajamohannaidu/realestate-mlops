@@ -132,6 +132,11 @@ variable "backend_timeout" {
   }
 }
 
+variable "artifact_registry_repo" {
+  type        = string
+  description = "Artifact Registry repository path (us-central1-docker.pkg.dev/PROJECT/REPO)"
+}
+
 # ============================================================================
 # STORAGE CONFIGURATION
 # ============================================================================

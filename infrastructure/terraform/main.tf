@@ -343,7 +343,7 @@ resource "google_cloud_run_service" "backend" {
       service_account_name = google_service_account.backend.email
 
       containers {
-        image = "gcr.io/${var.project_id}/realestate-backend:latest"
+        image = "${var.artifact_registry_repo}/realestate-backend:latest"
 
         # Environment Variables
         env {
@@ -472,7 +472,7 @@ resource "google_cloud_run_service" "frontend" {
       service_account_name = google_service_account.frontend.email
 
       containers {
-        image = "gcr.io/${var.project_id}/realestate-frontend:latest"
+        image = "${var.artifact_registry_repo}/realestate-frontend:latest"
 
         # Environment Variables
         env {

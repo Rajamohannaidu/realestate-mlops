@@ -20,12 +20,12 @@ frontend_memory        = "2Gi"
 frontend_cpu           = "2000m"
 
 # === Backend Configuration (FastAPI + ML) ===
-backend_min_instances = 2     # Keep 2+ for production (warm instances)
-backend_max_instances = 20    # Scale based on expected load
-backend_memory        = "4Gi" # ML models need memory
-backend_cpu           = "2000m"
-backend_timeout       = 300 # 5 minutes for ML inference
-
+backend_min_instances  = 2     # Keep 2+ for production (warm instances)
+backend_max_instances  = 20    # Scale based on expected load
+backend_memory         = "4Gi" # ML models need memory
+backend_cpu            = "2000m"
+backend_timeout        = 300 # 5 minutes for ML inference
+artifact_registry_repo = "us-central1-docker.pkg.dev/academic-atlas-475811-c5/realestate-repo"
 # === Storage Lifecycle ===
 models_bucket_lifecycle_days = 90 # Keep 3 months of model versions
 training_data_lifecycle_days = 90 # Keep 3 months of training data
