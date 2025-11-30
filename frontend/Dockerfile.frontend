@@ -1,0 +1,54 @@
+# ============================================================================
+# FRONTEND DOCKERFILE - Streamlit Application Container
+# ============================================================================
+# PURPOSE: Packages your 1000+ line Streamlit app for Cloud Run deployment
+# USAGE: docker build -f Dockerfile.frontend -t realestate-frontend .
+# ============================================================================
+
+FROM python:3.12-slim
+
+# Set working directory
+WORKDIR /app
+
+# Install system dependencies for Streamlit
+RUN apt-get update && apt-get install -y \
+    gcc \
+    g++ \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy frontend requirements first (for better caching)
+COPY requirements.frontend.txt .
+
+# Install Python dependencies
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.frontend.txt
+
+# Copy Streamlit application
+COPY app/ ./app/
+
+# Copy Streamlit configuration (if exists)
+COPY .streamlit/ ./.streamlit/ 2>/dev/null || true
+
+# Create cache directory for Streamlit
+RUN mkdir -p /root/.streamlit
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1
+ENV STREAMLIT_SERVER_PORT=8501
+ENV STREAMLIT_SERVER_ADDRESS=0.0.0.0
+
+# Expose Streamlit port
+EXPOSE 8501
+
+# Health check - Streamlit has a built-in health endpoint
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD curl -f http://localhost:8501/_stcore/health || exit 1
+
+# Run Streamlit application
+CMD ["streamlit", "run", "app/streamlit_app.py", \
+     "--server.port=8501", \
+     "--server.address=0.0.0.0", \
+     "--server.enableCORS=false", \
+     "--server.enableXsrfProtection=false", \
+     "--server.headless=true"]

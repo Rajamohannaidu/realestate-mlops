@@ -1,0 +1,49 @@
+# ============================================================================
+# BACKEND REQUIREMENTS - ML Models, Analytics, API Dependencies
+# ============================================================================
+# PURPOSE: All packages for ML inference, investment analytics, and API
+# COMPATIBLE WITH: Python 3.12 + Pydantic v1 (for TensorFlow compatibility)
+# ============================================================================
+
+# === FastAPI & API Framework ===
+fastapi==0.109.2                    # Web API framework (Pydantic v1 compatible)
+uvicorn[standard]==0.27.1           # ASGI server
+python-multipart==0.0.9             # File upload support
+httpx==0.26.0                       # HTTP client
+
+# === CRITICAL: Pydantic v1 for TensorFlow Compatibility ===
+pydantic==1.10.13                   # DO NOT UPGRADE - TensorFlow requires v1
+typing-extensions==4.11.0           # Type hints support
+
+# === Core ML/DL Frameworks (Your existing versions) ===
+numpy==1.26.4                       # Numerical computing
+tensorflow==2.16.1                  # Deep learning (Neural Network model)
+pandas==2.2.2                       # Data manipulation
+scikit-learn==1.5.0                 # Classical ML models
+xgboost==2.0.3                      # Gradient boosting
+lightgbm==4.3.0                     # Light gradient boosting
+
+# === Explainable AI ===
+shap==0.45.1                        # SHAP explanations
+lime==0.2.0.1                       # LIME interpretability
+
+# === Conversational AI (LangChain + Groq) ===
+langchain==0.1.0                    # LLM framework
+langchain-groq==0.0.1               # Groq integration
+langchain-community==0.0.13         # Community integrations
+python-dotenv==1.0.0                # Environment variables
+
+# === Google Cloud Platform ===
+google-cloud-storage==2.14.0        # GCS for model storage
+google-cloud-logging==3.9.0         # Cloud Logging
+google-cloud-aiplatform==1.42.1     # Vertex AI (for training pipelines)
+
+# === Data Processing & Utilities ===
+joblib==1.4.2                       # Model serialization
+scipy==1.13.1                       # Scientific computing
+requests==2.31.0                    # HTTP requests
+
+# === Visualization (for explainability) ===
+matplotlib==3.8.4                   # Plotting
+seaborn==0.12.2                     # Statistical visualizations
+plotly==5.22.0                      # Interactive charts (for exports)

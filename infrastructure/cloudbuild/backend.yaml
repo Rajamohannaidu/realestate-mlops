@@ -1,0 +1,101 @@
+# ============================================================================
+# BACKEND CLOUD BUILD CONFIGURATION - CI/CD for FastAPI
+# ============================================================================
+# PURPOSE: Automatically build and deploy backend ML API when code changes
+# TRIGGER: Runs when backend/ directory files change
+# DEPLOYS TO: Cloud Run (realestate-backend service)
+# ============================================================================
+
+steps:
+  # Step 1: Build Backend Docker Image
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-f'
+      - 'backend/Dockerfile.backend'
+      - '-t'
+      - 'gcr.io/$PROJECT_ID/realestate-backend:$SHORT_SHA'
+      - '-t'
+      - 'gcr.io/$PROJECT_ID/realestate-backend:latest'
+      - './backend'
+    id: 'build-backend-image'
+    
+  # Step 2: Push Image to Container Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - 'gcr.io/$PROJECT_ID/realestate-backend:$SHORT_SHA'
+    id: 'push-backend-image'
+    
+  # Step 3: Push Latest Tag
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - 'gcr.io/$PROJECT_ID/realestate-backend:latest'
+    id: 'push-backend-latest'
+    
+  # Step 4: Deploy to Cloud Run
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: 'gcloud'
+    args:
+      - 'run'
+      - 'deploy'
+      - 'realestate-backend'
+      - '--image'
+      - 'gcr.io/$PROJECT_ID/realestate-backend:$SHORT_SHA'
+      - '--region'
+      - '${_REGION}'
+      - '--platform'
+      - 'managed'
+      - '--allow-unauthenticated'
+      - '--memory'
+      - '4Gi'
+      - '--cpu'
+      - '2'
+      - '--timeout'
+      - '300'
+      - '--max-instances'
+      - '20'
+      - '--min-instances'
+      - '2'
+      - '--set-env-vars'
+      - 'GCS_BUCKET_NAME=${_GCS_BUCKET_NAME},GCS_MODEL_PATH=${_GCS_MODEL_PATH},ENVIRONMENT=${_ENVIRONMENT}'
+      - '--set-secrets'
+      - 'GROQ_API_KEY=groq-api-key:latest'
+    id: 'deploy-backend-cloud-run'
+    
+  # Step 5: Update Frontend with New Backend URL (if needed)
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        BACKEND_URL=$(gcloud run services describe realestate-backend \
+          --region=${_REGION} \
+          --format='value(status.url)')
+        
+        gcloud run services update realestate-frontend \
+          --region=${_REGION} \
+          --update-env-vars="BACKEND_API_URL=$${BACKEND_URL}" \
+          --quiet || echo "Frontend not deployed yet"
+    id: 'update-frontend-backend-url'
+
+# Configuration options
+options:
+  logging: CLOUD_LOGGING_ONLY
+  machineType: 'N1_HIGHCPU_8'
+
+# Images to push to registry
+images:
+  - 'gcr.io/$PROJECT_ID/realestate-backend:$SHORT_SHA'
+  - 'gcr.io/$PROJECT_ID/realestate-backend:latest'
+
+# Substitution variables
+substitutions:
+  _REGION: 'us-central1'
+  _GCS_BUCKET_NAME: '${PROJECT_ID}-ml-models'
+  _GCS_MODEL_PATH: 'models/latest'
+  _ENVIRONMENT: 'production'
+
+# Timeout for entire build
+timeout: '2400s'  # 40 minutes (ML dependencies take time)

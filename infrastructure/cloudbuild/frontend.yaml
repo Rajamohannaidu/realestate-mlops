@@ -1,0 +1,84 @@
+# ============================================================================
+# FRONTEND CLOUD BUILD CONFIGURATION - CI/CD for Streamlit
+# ============================================================================
+# PURPOSE: Automatically build and deploy frontend when code changes
+# TRIGGER: Runs when frontend/ directory files change
+# DEPLOYS TO: Cloud Run (realestate-frontend service)
+# ============================================================================
+
+steps:
+  # Step 1: Build Frontend Docker Image
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-f'
+      - 'frontend/Dockerfile.frontend'
+      - '-t'
+      - 'gcr.io/$PROJECT_ID/realestate-frontend:$SHORT_SHA'
+      - '-t'
+      - 'gcr.io/$PROJECT_ID/realestate-frontend:latest'
+      - './frontend'
+    id: 'build-frontend-image'
+    
+  # Step 2: Push Image to Container Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - 'gcr.io/$PROJECT_ID/realestate-frontend:$SHORT_SHA'
+    id: 'push-frontend-image'
+    
+  # Step 3: Push Latest Tag
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - 'gcr.io/$PROJECT_ID/realestate-frontend:latest'
+    id: 'push-frontend-latest'
+    
+  # Step 4: Get Backend URL (frontend needs to know backend location)
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        gcloud run services describe realestate-backend \
+          --region=${_REGION} \
+          --format='value(status.url)' > /workspace/backend_url.txt
+    id: 'get-backend-url'
+    
+  # Step 5: Deploy to Cloud Run
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        BACKEND_URL=$(cat /workspace/backend_url.txt)
+        gcloud run deploy realestate-frontend \
+          --image=gcr.io/$PROJECT_ID/realestate-frontend:$SHORT_SHA \
+          --region=${_REGION} \
+          --platform=managed \
+          --allow-unauthenticated \
+          --memory=2Gi \
+          --cpu=2 \
+          --max-instances=10 \
+          --min-instances=1 \
+          --timeout=300 \
+          --set-env-vars="BACKEND_API_URL=$${BACKEND_URL},ENVIRONMENT=${_ENVIRONMENT}"
+    id: 'deploy-frontend-cloud-run'
+
+# Configuration options
+options:
+  logging: CLOUD_LOGGING_ONLY
+  machineType: 'N1_HIGHCPU_8'
+
+# Images to push to registry
+images:
+  - 'gcr.io/$PROJECT_ID/realestate-frontend:$SHORT_SHA'
+  - 'gcr.io/$PROJECT_ID/realestate-frontend:latest'
+
+# Substitution variables (can be overridden)
+substitutions:
+  _REGION: 'us-central1'
+  _ENVIRONMENT: 'production'
+
+# Timeout for entire build
+timeout: '1800s'

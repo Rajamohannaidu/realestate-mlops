@@ -1,0 +1,73 @@
+# ============================================================================
+# BACKEND DOCKERFILE - FastAPI ML Service Container
+# ============================================================================
+# PURPOSE: Packages all ML models, analytics, and API for Cloud Run
+# USAGE: docker build -f Dockerfile.backend -t realestate-backend .
+# INCLUDES: 7 ML models, Investment Analytics, SHAP/LIME, Chatbot
+# ============================================================================
+
+FROM python:3.12-slim
+
+# Set working directory
+WORKDIR /app
+
+# Install system dependencies for ML libraries
+RUN apt-get update && apt-get install -y \
+    gcc \
+    g++ \
+    gfortran \
+    curl \
+    libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy backend requirements first (for better Docker layer caching)
+COPY requirements.backend.txt .
+
+# Install Python dependencies
+# Split into chunks to avoid memory issues during build
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel
+
+# Install core dependencies first
+RUN pip install --no-cache-dir \
+    numpy==1.26.4 \
+    pandas==2.2.2 \
+    scipy==1.13.1
+
+# Install ML frameworks
+RUN pip install --no-cache-dir \
+    scikit-learn==1.5.0 \
+    xgboost==2.0.3 \
+    lightgbm==4.3.0
+
+# Install TensorFlow (large package)
+RUN pip install --no-cache-dir tensorflow==2.16.1
+
+# Install remaining packages
+RUN pip install --no-cache-dir -r requirements.backend.txt
+
+# Copy application code
+COPY src/ ./src/
+
+# Copy models directory structure (models will be downloaded from GCS)
+RUN mkdir -p models/saved_models models/explainability
+
+# Set Python path
+ENV PYTHONPATH=/app:$PYTHONPATH
+ENV PYTHONUNBUFFERED=1
+ENV PORT=8080
+
+# Expose FastAPI port
+EXPOSE 8080
+
+# Health check for FastAPI
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD curl -f http://localhost:8080/health || exit 1
+
+# Run FastAPI with uvicorn
+# --workers 4: Use 4 worker processes for better performance
+# --timeout-keep-alive 65: Keep connections alive
+CMD ["uvicorn", "src.api.main:app", \
+     "--host", "0.0.0.0", \
+     "--port", "8080", \
+     "--workers", "4", \
+     "--timeout-keep-alive", "65"]

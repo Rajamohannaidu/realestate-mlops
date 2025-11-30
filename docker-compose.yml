@@ -1,0 +1,103 @@
+# ============================================================================
+# DOCKER COMPOSE - Local Development Environment
+# ============================================================================
+# PURPOSE: Run both frontend and backend locally with Docker
+# USAGE: docker-compose up
+# BENEFITS: Matches production environment exactly
+# ============================================================================
+
+version: '3.8'
+
+services:
+  # ===========================
+  # Backend Service (FastAPI)
+  # ===========================
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.backend
+    container_name: realestate-backend
+    ports:
+      - "8080:8080"
+    environment:
+      - PYTHONUNBUFFERED=1
+      - GCS_BUCKET_NAME=${GCS_BUCKET_NAME}
+      - GCS_MODEL_PATH=${GCS_MODEL_PATH:-models/latest}
+      - GROQ_API_KEY=${GROQ_API_KEY}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    volumes:
+      # Mount local models directory (for development)
+      - ./backend/models:/app/models
+      # Mount source code for hot-reload (development only)
+      - ./backend/src:/app/src
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - realestate-network
+    restart: unless-stopped
+
+  # ===========================
+  # Frontend Service (Streamlit)
+  # ===========================
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.frontend
+    container_name: realestate-frontend
+    ports:
+      - "8501:8501"
+    environment:
+      - PYTHONUNBUFFERED=1
+      - BACKEND_API_URL=http://backend:8080
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    volumes:
+      # Mount app directory for hot-reload (development only)
+      - ./frontend/app:/app/app
+    depends_on:
+      - backend
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - realestate-network
+    restart: unless-stopped
+
+# ===========================
+# Networks
+# ===========================
+networks:
+  realestate-network:
+    driver: bridge
+
+# ===========================
+# USAGE INSTRUCTIONS
+# ===========================
+# 
+# Start services:
+#   docker-compose up
+# 
+# Start in background:
+#   docker-compose up -d
+# 
+# View logs:
+#   docker-compose logs -f
+# 
+# Stop services:
+#   docker-compose down
+# 
+# Rebuild images:
+#   docker-compose build
+# 
+# Access services:
+#   Frontend: http://localhost:8501
+#   Backend:  http://localhost:8080
+#   API Docs: http://localhost:8080/docs
+# 
+# ===========================

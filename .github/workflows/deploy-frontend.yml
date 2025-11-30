@@ -1,0 +1,116 @@
+# ============================================================================
+# GITHUB ACTIONS - Auto Deploy Frontend on Push
+# ============================================================================
+# PURPOSE: Automatically deploy frontend when frontend/ files change
+# TRIGGER: Push to main branch with changes in frontend/ directory
+# DEPLOYS: Streamlit UI to Cloud Run
+# ============================================================================
+
+name: Deploy Frontend (Streamlit)
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/deploy-frontend.yml'
+  workflow_dispatch:  # Allow manual trigger
+
+env:
+  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  REGION: us-central1
+  SERVICE_NAME: realestate-frontend
+
+jobs:
+  deploy-frontend:
+    name: Build and Deploy Frontend
+    runs-on: ubuntu-latest
+    
+    permissions:
+      contents: read
+      id-token: write
+    
+    steps:
+      # Step 1: Checkout code
+      - name: Checkout Code
+        uses: actions/checkout@v3
+      
+      # Step 2: Authenticate to GCP
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v1
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+      
+      # Step 3: Setup Cloud SDK
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v1
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+      
+      # Step 4: Configure Docker for GCR
+      - name: Configure Docker for GCR
+        run: |
+          gcloud auth configure-docker
+      
+      # Step 5: Get Backend URL
+      - name: Get Backend URL
+        id: backend-url
+        run: |
+          BACKEND_URL=$(gcloud run services describe realestate-backend \
+            --region=${{ env.REGION }} \
+            --format='value(status.url)' || echo "http://localhost:8080")
+          echo "url=$BACKEND_URL" >> $GITHUB_OUTPUT
+      
+      # Step 6: Build Docker Image
+      - name: Build Frontend Docker Image
+        run: |
+          cd frontend
+          docker build -f Dockerfile.frontend \
+            -t gcr.io/${{ env.PROJECT_ID }}/${{ env.SERVICE_NAME }}:${{ github.sha }} \
+            -t gcr.io/${{ env.PROJECT_ID }}/${{ env.SERVICE_NAME }}:latest \
+            .
+      
+      # Step 7: Push to GCR
+      - name: Push to Container Registry
+        run: |
+          docker push gcr.io/${{ env.PROJECT_ID }}/${{ env.SERVICE_NAME }}:${{ github.sha }}
+          docker push gcr.io/${{ env.PROJECT_ID }}/${{ env.SERVICE_NAME }}:latest
+      
+      # Step 8: Deploy to Cloud Run
+      - name: Deploy to Cloud Run
+        run: |
+          gcloud run deploy ${{ env.SERVICE_NAME }} \
+            --image=gcr.io/${{ env.PROJECT_ID }}/${{ env.SERVICE_NAME }}:${{ github.sha }} \
+            --platform=managed \
+            --region=${{ env.REGION }} \
+            --allow-unauthenticated \
+            --memory=2Gi \
+            --cpu=2 \
+            --max-instances=10 \
+            --min-instances=1 \
+            --set-env-vars="BACKEND_API_URL=${{ steps.backend-url.outputs.url }}"
+      
+      # Step 9: Get Service URL
+      - name: Get Service URL
+        id: service-url
+        run: |
+          SERVICE_URL=$(gcloud run services describe ${{ env.SERVICE_NAME }} \
+            --region=${{ env.REGION }} \
+            --format='value(status.url)')
+          echo "url=$SERVICE_URL" >> $GITHUB_OUTPUT
+      
+      # Step 10: Test Deployment
+      - name: Test Frontend
+        run: |
+          sleep 10
+          curl -f ${{ steps.service-url.outputs.url }} || exit 1
+          echo "Frontend is live at: ${{ steps.service-url.outputs.url }}"
+      
+      # Step 11: Deployment Summary
+      - name: Deployment Summary
+        run: |
+          echo "✅ Frontend Deployment Complete!"
+          echo "🌐 URL: ${{ steps.service-url.outputs.url }}"
+          echo "📦 Image: gcr.io/${{ env.PROJECT_ID }}/${{ env.SERVICE_NAME }}:${{ github.sha }}"
+          echo "🔗 Backend: ${{ steps.backend-url.outputs.url }}"

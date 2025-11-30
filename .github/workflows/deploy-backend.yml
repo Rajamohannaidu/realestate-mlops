@@ -1,0 +1,123 @@
+# ============================================================================
+# GITHUB ACTIONS - Auto Deploy Backend on Push
+# ============================================================================
+# PURPOSE: Automatically deploy backend when backend/ files change
+# TRIGGER: Push to main branch with changes in backend/ directory
+# DEPLOYS: FastAPI ML service to Cloud Run
+# ============================================================================
+
+name: Deploy Backend (FastAPI + ML)
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'backend/**'
+      - '.github/workflows/deploy-backend.yml'
+  workflow_dispatch:  # Allow manual trigger
+
+env:
+  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  REGION: us-central1
+  SERVICE_NAME: realestate-backend
+
+jobs:
+  deploy-backend:
+    name: Build and Deploy Backend
+    runs-on: ubuntu-latest
+    
+    permissions:
+      contents: read
+      id-token: write
+    
+    steps:
+      # Step 1: Checkout code
+      - name: Checkout Code
+        uses: actions/checkout@v3
+      
+      # Step 2: Authenticate to GCP
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v1
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+      
+      # Step 3: Setup Cloud SDK
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v1
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+      
+      # Step 4: Configure Docker for GCR
+      - name: Configure Docker for GCR
+        run: |
+          gcloud auth configure-docker
+      
+      # Step 5: Build Docker Image
+      - name: Build Backend Docker Image
+        run: |
+          cd backend
+          docker build -f Dockerfile.backend \
+            -t gcr.io/${{ env.PROJECT_ID }}/${{ env.SERVICE_NAME }}:${{ github.sha }} \
+            -t gcr.io/${{ env.PROJECT_ID }}/${{ env.SERVICE_NAME }}:latest \
+            .
+      
+      # Step 6: Push to GCR
+      - name: Push to Container Registry
+        run: |
+          docker push gcr.io/${{ env.PROJECT_ID }}/${{ env.SERVICE_NAME }}:${{ github.sha }}
+          docker push gcr.io/${{ env.PROJECT_ID }}/${{ env.SERVICE_NAME }}:latest
+      
+      # Step 7: Deploy to Cloud Run
+      - name: Deploy to Cloud Run
+        run: |
+          gcloud run deploy ${{ env.SERVICE_NAME }} \
+            --image=gcr.io/${{ env.PROJECT_ID }}/${{ env.SERVICE_NAME }}:${{ github.sha }} \
+            --platform=managed \
+            --region=${{ env.REGION }} \
+            --allow-unauthenticated \
+            --memory=4Gi \
+            --cpu=2 \
+            --timeout=300 \
+            --max-instances=20 \
+            --min-instances=2 \
+            --set-env-vars="GCS_BUCKET_NAME=${{ secrets.GCS_BUCKET_NAME }},GCS_MODEL_PATH=models/latest" \
+            --set-secrets="GROQ_API_KEY=groq-api-key:latest"
+      
+      # Step 8: Get Service URL
+      - name: Get Backend URL
+        id: service-url
+        run: |
+          SERVICE_URL=$(gcloud run services describe ${{ env.SERVICE_NAME }} \
+            --region=${{ env.REGION }} \
+            --format='value(status.url)')
+          echo "url=$SERVICE_URL" >> $GITHUB_OUTPUT
+      
+      # Step 9: Update Frontend
+      - name: Update Frontend with New Backend URL
+        run: |
+          gcloud run services update realestate-frontend \
+            --region=${{ env.REGION }} \
+            --update-env-vars="BACKEND_API_URL=${{ steps.service-url.outputs.url }}" \
+            --quiet || echo "Frontend not deployed yet"
+      
+      # Step 10: Test Backend
+      - name: Test Backend Health
+        run: |
+          sleep 15
+          curl -f ${{ steps.service-url.outputs.url }}/health || exit 1
+          echo "Backend is healthy!"
+      
+      # Step 11: Test API Endpoints
+      - name: Test API Endpoints
+        run: |
+          echo "Testing /models/info endpoint"
+          curl -f ${{ steps.service-url.outputs.url }}/models/info
+      
+      # Step 12: Deployment Summary
+      - name: Deployment Summary
+        run: |
+          echo "✅ Backend Deployment Complete!"
+          echo "🌐 URL: ${{ steps.service-url.outputs.url }}"
+          echo "📚 API Docs: ${{ steps.service-url.outputs.url }}/docs"
+          echo "📦 Image: gcr.io/${{ env.PROJECT_ID }}/${{ env.SERVICE_NAME }}:${{ github.sha }}"

@@ -1,0 +1,48 @@
+# ============================================================================
+# STREAMLIT CONFIGURATION - UI Appearance & Behavior
+# ============================================================================
+# PURPOSE: Customize Streamlit's look and performance settings
+# LOCATION: frontend/.streamlit/config.toml
+# ============================================================================
+
+[theme]
+# Primary color for interactive elements
+primaryColor = "#FF4B4B"
+
+# Background color
+backgroundColor = "#0E1117"
+
+# Secondary background color (for sidebar, etc.)
+secondaryBackgroundColor = "#262730"
+
+# Text color
+textColor = "#FAFAFA"
+
+# Font family
+font = "sans serif"
+
+[server]
+# Enable file watcher for development (disable in production)
+fileWatcherType = "none"
+
+# Max upload size (in MB)
+maxUploadSize = 200
+
+# Enable CORS
+enableCORS = false
+
+# Enable XSRF protection
+enableXsrfProtection = false
+
+# Run in headless mode
+headless = true
+
+[browser]
+# Gather usage stats
+gatherUsageStats = false
+
+# Server address to connect to
+serverAddress = "0.0.0.0"
+
+# Server port to connect to
+serverPort = 8501

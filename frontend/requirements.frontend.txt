@@ -1,0 +1,32 @@
+# ============================================================================
+# FRONTEND REQUIREMENTS - Streamlit UI Dependencies
+# ============================================================================
+# PURPOSE: All packages needed for the Streamlit user interface
+# NOTE: This is separate from backend to keep frontend container lightweight
+# ============================================================================
+
+# === Core Web Framework ===
+streamlit==1.35.0                   # Web UI framework
+
+# === Visualization ===
+plotly==5.22.0                      # Interactive charts
+matplotlib==3.8.4                   # Static plots (if used in UI)
+seaborn==0.12.2                     # Statistical visualizations
+
+# === Data Processing (for display only) ===
+pandas==2.2.2                       # DataFrames for tables
+numpy==1.26.4                       # Numerical operations
+
+# === API Communication ===
+requests==2.31.0                    # HTTP requests to backend
+httpx==0.26.0                       # Alternative async HTTP client
+
+# === Environment Management ===
+python-dotenv==1.0.0                # Load .env files
+
+# === Optional: Better UX ===
+streamlit-option-menu==0.3.6        # Enhanced navigation (optional)
+streamlit-lottie==0.0.5             # Animations (optional)
+
+# === Utilities ===
+pillow==10.2.0                      # Image processing (if showing images)
