@@ -92,3 +92,28 @@ training_results.json
 backend/models/*.*"mlartifacts/" 
 ".terraform/" 
 "*.exe" 
+
+# Terraform state files
+*.tfstate
+*.tfstate.*
+
+# Crash logs
+crash.log
+crash.*.log
+
+# Provider plugins & cache (IMPORTANT)
+.terraform/
+.terraform.lock.hcl
+
+# Sensitive variable files
+terraform.tfvars
+*.tfvars
+
+# Local override files
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Executables (to avoid pushing .exe provider binaries)
+*.exe
