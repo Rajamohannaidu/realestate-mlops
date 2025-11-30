@@ -89,4 +89,4 @@ Thumbs.db
 # Application specific
 *.pyc
 training_results.json
-backend/models/*.*
+backend/models/*.*"mlartifacts/" 
