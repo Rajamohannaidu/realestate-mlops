@@ -1,4 +1,6 @@
-# Python
+# ---------------------------------------
+# PYTHON
+# ---------------------------------------
 __pycache__/
 *.py[cod]
 *$py.class
@@ -20,37 +22,40 @@ wheels/
 .installed.cfg
 *.egg
 
-# Virtual Environment
+# Virtual Environments
 venv/
 env/
 ENV/
 env.bak/
 venv.bak/
 
-# IDEs
+# IDEs / OS Files
 .vscode/
 .idea/
+.DS_Store
+Thumbs.db
 *.swp
 *.swo
 *~
-.DS_Store
 
-# Jupyter Notebook
+# Jupyter
 .ipynb_checkpoints
 *.ipynb
 
-# Environment variables
+# Environment Files
 .env
 .env.local
 .env.*.local
 
-# Data files
+# ---------------------------------------
+# DATA & MODELS
+# ---------------------------------------
 data/raw/*.csv
 data/processed/*.csv
 *.db
 *.sqlite
 
-# Model files
+# Model Files
 models/saved_models/*.pkl
 models/saved_models/*.h5
 models/saved_models/*.joblib
@@ -61,7 +66,7 @@ models/explainability/*.pkl
 logs/
 *.log
 
-# Reports and exports
+# Reports & Exports
 reports/*.txt
 reports/*.pdf
 exports/*.csv
@@ -76,56 +81,43 @@ htmlcov/
 # Documentation
 docs/_build/
 
-# OS
-Thumbs.db
-.DS_Store
-
-# Temporary files
+# Temp Files
 *.tmp
 *.bak
-*.swp
-*~
 
-# Application specific
-*.pyc
+# App-specific
 training_results.json
-backend/models/*.*"mlartifacts/" 
-".terraform/" 
-"*.exe" 
+backend/models/*.*
 
-# Terraform state files
+# MLflow Artifacts
+mlartifacts/
+
+# ---------------------------------------
+# TERRAFORM
+# ---------------------------------------
+# Terraform working directory
+.terraform/
+
+# Terraform lock file
+.terraform.lock.hcl
+
+# Terraform state
 *.tfstate
 *.tfstate.*
 
-# Crash logs
-crash.log
-crash.*.log
-
-# Provider plugins & cache (IMPORTANT)
-.terraform/
-.terraform.lock.hcl
-
-# Sensitive variable files
+# Sensitive variables
 terraform.tfvars
 *.tfvars
 
-# Local override files
+# Local overrides
 override.tf
 override.tf.json
 *_override.tf
 *_override.tf.json
 
-# Executables (to avoid pushing .exe provider binaries)
-*.exe
-# Terraform specific files
-.terraform/
-*.tfstate
-*.tfstate.*
-.terraform.lock.hcl
-
-# Sensitive vars
-terraform.tfvars
-*.tfvars
+# Crash logs
+crash.log
+crash.*.log
 
 # Provider binaries
 *.exe
