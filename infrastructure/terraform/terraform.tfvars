@@ -9,45 +9,45 @@
 # ============================================================================
 
 # === REQUIRED: GCP Project Configuration ===
-project_id = "academic-atlas-475811-c5"  # CHANGE THIS!
-region     = "us-central1"
+project_id  = "academic-atlas-475811-c5" # CHANGE THIS!
+region      = "us-central1"
 environment = "production"
 
 # === Frontend Configuration (Streamlit) ===
-frontend_min_instances = 1    # 0 for dev (cost saving), 1+ for production
-frontend_max_instances = 10   # Maximum concurrent users / 80
+frontend_min_instances = 1  # 0 for dev (cost saving), 1+ for production
+frontend_max_instances = 10 # Maximum concurrent users / 80
 frontend_memory        = "2Gi"
-frontend_cpu          = "2000m"
+frontend_cpu           = "2000m"
 
 # === Backend Configuration (FastAPI + ML) ===
 backend_min_instances = 2     # Keep 2+ for production (warm instances)
 backend_max_instances = 20    # Scale based on expected load
 backend_memory        = "4Gi" # ML models need memory
-backend_cpu          = "2000m"
-backend_timeout      = 300    # 5 minutes for ML inference
+backend_cpu           = "2000m"
+backend_timeout       = 300 # 5 minutes for ML inference
 
 # === Storage Lifecycle ===
-models_bucket_lifecycle_days       = 90  # Keep 3 months of model versions
-training_data_lifecycle_days      = 90  # Keep 3 months of training data
-reports_lifecycle_days            = 30  # Keep 1 month of user reports
+models_bucket_lifecycle_days = 90 # Keep 3 months of model versions
+training_data_lifecycle_days = 90 # Keep 3 months of training data
+reports_lifecycle_days       = 30 # Keep 1 month of user reports
 
 # === Monitoring ===
-enable_monitoring    = true
-enable_logging      = true
-log_retention_days  = 30
+enable_monitoring  = true
+enable_logging     = true
+log_retention_days = 30
 
 # === Security ===
-enable_public_access = true   # Set false for private deployment
-enable_iap          = false   # Set true to enable Identity-Aware Proxy
+enable_public_access = true  # Set false for private deployment
+enable_iap           = false # Set true to enable Identity-Aware Proxy
 
 # === Training ===
 enable_scheduled_training = true
-training_schedule        = "0 2 * * 0"  # Sunday 2 AM
-training_timezone        = "America/New_York"
+training_schedule         = "0 2 * * 0" # Sunday 2 AM
+training_timezone         = "America/New_York"
 
 # === Cost Optimization ===
-enable_cpu_throttling    = false  # Keep false for ML workloads
-enable_startup_cpu_boost = true   # Faster cold starts
+enable_cpu_throttling    = false # Keep false for ML workloads
+enable_startup_cpu_boost = true  # Faster cold starts
 
 # === Labels ===
 common_labels = {

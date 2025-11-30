@@ -190,9 +190,9 @@ output "update_frontend_command" {
 output "estimated_monthly_cost_range" {
   description = "Estimated monthly cost range in USD"
   value = {
-    minimum  = "$50-100 (dev with min instances = 0)"
-    typical  = "$135-390 (production with typical load)"
-    maximum  = "$500+ (high traffic with max instances)"
+    minimum = "$50-100 (dev with min instances = 0)"
+    typical = "$135-390 (production with typical load)"
+    maximum = "$500+ (high traffic with max instances)"
   }
 }
 
@@ -205,26 +205,26 @@ output "deployment_summary" {
   value = {
     # Services
     frontend = {
-      url            = google_cloud_run_service.frontend.status[0].url
-      service_name   = google_cloud_run_service.frontend.name
-      region         = google_cloud_run_service.frontend.location
-      min_instances  = var.frontend_min_instances
-      max_instances  = var.frontend_max_instances
-      memory         = var.frontend_memory
-      cpu            = var.frontend_cpu
+      url           = google_cloud_run_service.frontend.status[0].url
+      service_name  = google_cloud_run_service.frontend.name
+      region        = google_cloud_run_service.frontend.location
+      min_instances = var.frontend_min_instances
+      max_instances = var.frontend_max_instances
+      memory        = var.frontend_memory
+      cpu           = var.frontend_cpu
     }
-    
+
     backend = {
-      url            = google_cloud_run_service.backend.status[0].url
-      api_docs       = "${google_cloud_run_service.backend.status[0].url}/docs"
-      service_name   = google_cloud_run_service.backend.name
-      region         = google_cloud_run_service.backend.location
-      min_instances  = var.backend_min_instances
-      max_instances  = var.backend_max_instances
-      memory         = var.backend_memory
-      cpu            = var.backend_cpu
+      url           = google_cloud_run_service.backend.status[0].url
+      api_docs      = "${google_cloud_run_service.backend.status[0].url}/docs"
+      service_name  = google_cloud_run_service.backend.name
+      region        = google_cloud_run_service.backend.location
+      min_instances = var.backend_min_instances
+      max_instances = var.backend_max_instances
+      memory        = var.backend_memory
+      cpu           = var.backend_cpu
     }
-    
+
     # Storage
     storage = {
       models         = "gs://${google_storage_bucket.ml_models.name}"
@@ -232,14 +232,14 @@ output "deployment_summary" {
       reports        = "gs://${google_storage_bucket.reports.name}"
       explainability = "gs://${google_storage_bucket.explainability.name}"
     }
-    
+
     # Service Accounts
     service_accounts = {
       frontend = google_service_account.frontend.email
       backend  = google_service_account.backend.email
       training = google_service_account.training.email
     }
-    
+
     # Environment
     environment = var.environment
     region      = var.region
@@ -254,11 +254,11 @@ output "deployment_summary" {
 output "quick_access" {
   description = "Quick access commands and URLs"
   value = {
-    test_frontend  = "curl ${google_cloud_run_service.frontend.status[0].url}"
-    test_backend   = "curl ${google_cloud_run_service.backend.status[0].url}/health"
-    view_api_docs  = "${google_cloud_run_service.backend.status[0].url}/docs"
-    upload_models  = "gsutil -m cp -r models/saved_models/* gs://${google_storage_bucket.ml_models.name}/models/latest/"
-    backend_logs   = "gcloud run services logs read ${google_cloud_run_service.backend.name} --region=${var.region}"
-    frontend_logs  = "gcloud run services logs read ${google_cloud_run_service.frontend.name} --region=${var.region}"
+    test_frontend = "curl ${google_cloud_run_service.frontend.status[0].url}"
+    test_backend  = "curl ${google_cloud_run_service.backend.status[0].url}/health"
+    view_api_docs = "${google_cloud_run_service.backend.status[0].url}/docs"
+    upload_models = "gsutil -m cp -r models/saved_models/* gs://${google_storage_bucket.ml_models.name}/models/latest/"
+    backend_logs  = "gcloud run services logs read ${google_cloud_run_service.backend.name} --region=${var.region}"
+    frontend_logs = "gcloud run services logs read ${google_cloud_run_service.frontend.name} --region=${var.region}"
   }
 }

@@ -8,7 +8,7 @@
 
 terraform {
   required_version = ">= 1.0"
-  
+
   required_providers {
     google = {
       source  = "hashicorp/google"
@@ -19,7 +19,7 @@ terraform {
       version = "~> 5.0"
     }
   }
-  
+
   # Store Terraform state in GCS bucket
   backend "gcs" {
     bucket = "academic-atlas-475811-c5-terraform-state"
@@ -55,23 +55,23 @@ data "google_project" "project" {
 
 resource "google_project_service" "required_apis" {
   for_each = toset([
-    "run.googleapis.com",                    # Cloud Run
-    "cloudbuild.googleapis.com",             # Cloud Build
-    "storage.googleapis.com",                # Cloud Storage
-    "aiplatform.googleapis.com",             # Vertex AI
-    "logging.googleapis.com",                # Cloud Logging
-    "monitoring.googleapis.com",             # Cloud Monitoring
-    "secretmanager.googleapis.com",          # Secret Manager
-    "containerregistry.googleapis.com",      # Container Registry
-    "cloudscheduler.googleapis.com",         # Cloud Scheduler
-    "compute.googleapis.com",                # Compute (for networking)
+    "run.googleapis.com",               # Cloud Run
+    "cloudbuild.googleapis.com",        # Cloud Build
+    "storage.googleapis.com",           # Cloud Storage
+    "aiplatform.googleapis.com",        # Vertex AI
+    "logging.googleapis.com",           # Cloud Logging
+    "monitoring.googleapis.com",        # Cloud Monitoring
+    "secretmanager.googleapis.com",     # Secret Manager
+    "containerregistry.googleapis.com", # Container Registry
+    "cloudscheduler.googleapis.com",    # Cloud Scheduler
+    "compute.googleapis.com",           # Compute (for networking)
   ])
-  
+
   project = var.project_id
   service = each.key
-  
+
   disable_on_destroy = false
-  
+
   timeouts {
     create = "30m"
     update = "40m"
@@ -86,13 +86,13 @@ resource "google_project_service" "required_apis" {
 resource "google_storage_bucket" "ml_models" {
   name     = "${var.project_id}-ml-models"
   location = var.region
-  
+
   uniform_bucket_level_access = true
-  
+
   versioning {
     enabled = true
   }
-  
+
   lifecycle_rule {
     condition {
       num_newer_versions = 5
@@ -101,13 +101,13 @@ resource "google_storage_bucket" "ml_models" {
       type = "Delete"
     }
   }
-  
+
   labels = {
     environment = var.environment
     purpose     = "ml-models"
     component   = "backend"
   }
-  
+
   depends_on = [google_project_service.required_apis]
 }
 
@@ -115,24 +115,24 @@ resource "google_storage_bucket" "ml_models" {
 resource "google_storage_bucket" "training_data" {
   name     = "${var.project_id}-training-data"
   location = var.region
-  
+
   uniform_bucket_level_access = true
-  
+
   lifecycle_rule {
     condition {
-      age = 90  # Delete data older than 90 days
+      age = 90 # Delete data older than 90 days
     }
     action {
       type = "Delete"
     }
   }
-  
+
   labels = {
     environment = var.environment
     purpose     = "training-data"
     component   = "training"
   }
-  
+
   depends_on = [google_project_service.required_apis]
 }
 
@@ -140,24 +140,24 @@ resource "google_storage_bucket" "training_data" {
 resource "google_storage_bucket" "reports" {
   name     = "${var.project_id}-reports"
   location = var.region
-  
+
   uniform_bucket_level_access = true
-  
+
   lifecycle_rule {
     condition {
-      age = 30  # Delete reports older than 30 days
+      age = 30 # Delete reports older than 30 days
     }
     action {
       type = "Delete"
     }
   }
-  
+
   labels = {
     environment = var.environment
     purpose     = "user-reports"
     component   = "frontend"
   }
-  
+
   depends_on = [google_project_service.required_apis]
 }
 
@@ -165,15 +165,15 @@ resource "google_storage_bucket" "reports" {
 resource "google_storage_bucket" "explainability" {
   name     = "${var.project_id}-explainability"
   location = var.region
-  
+
   uniform_bucket_level_access = true
-  
+
   labels = {
     environment = var.environment
     purpose     = "explainability"
     component   = "backend"
   }
-  
+
   depends_on = [google_project_service.required_apis]
 }
 
@@ -184,16 +184,16 @@ resource "google_storage_bucket" "explainability" {
 # Secret for Groq API Key
 resource "google_secret_manager_secret" "groq_api_key" {
   secret_id = "groq-api-key"
-  
+
   replication {
     auto {}
   }
-  
+
   labels = {
     environment = var.environment
     purpose     = "chatbot"
   }
-  
+
   depends_on = [google_project_service.required_apis]
 }
 
@@ -203,16 +203,16 @@ resource "google_secret_manager_secret" "groq_api_key" {
 # Secret for LangChain API Key (optional)
 resource "google_secret_manager_secret" "langchain_api_key" {
   secret_id = "langchain-api-key"
-  
+
   replication {
     auto {}
   }
-  
+
   labels = {
     environment = var.environment
     purpose     = "chatbot"
   }
-  
+
   depends_on = [google_project_service.required_apis]
 }
 
@@ -337,35 +337,35 @@ resource "google_project_iam_member" "training_logging" {
 resource "google_cloud_run_service" "backend" {
   name     = "realestate-backend"
   location = var.region
-  
+
   template {
     spec {
       service_account_name = google_service_account.backend.email
-      
+
       containers {
         image = "gcr.io/${var.project_id}/realestate-backend:latest"
-        
+
         # Environment Variables
         env {
           name  = "GCS_BUCKET_NAME"
           value = google_storage_bucket.ml_models.name
         }
-        
+
         env {
           name  = "GCS_MODEL_PATH"
           value = "models/latest"
         }
-        
+
         env {
           name  = "ENVIRONMENT"
           value = var.environment
         }
-        
+
         env {
           name  = "LOG_LEVEL"
           value = "INFO"
         }
-        
+
         # Secrets
         env {
           name = "GROQ_API_KEY"
@@ -376,7 +376,7 @@ resource "google_cloud_run_service" "backend" {
             }
           }
         }
-        
+
         env {
           name = "LANGCHAIN_API_KEY"
           value_from {
@@ -386,7 +386,7 @@ resource "google_cloud_run_service" "backend" {
             }
           }
         }
-        
+
         # Resource Limits
         resources {
           limits = {
@@ -394,13 +394,13 @@ resource "google_cloud_run_service" "backend" {
             memory = "4Gi"
           }
         }
-        
+
         # Port
         ports {
           name           = "http1"
           container_port = 8080
         }
-        
+
         # Startup probe
         startup_probe {
           http_get {
@@ -412,7 +412,7 @@ resource "google_cloud_run_service" "backend" {
           period_seconds        = 10
           failure_threshold     = 3
         }
-        
+
         # Liveness probe
         liveness_probe {
           http_get {
@@ -425,19 +425,19 @@ resource "google_cloud_run_service" "backend" {
           failure_threshold     = 3
         }
       }
-      
+
       container_concurrency = 80
       timeout_seconds       = 300
     }
-    
+
     metadata {
       annotations = {
-        "autoscaling.knative.dev/maxScale"        = var.backend_max_instances
-        "autoscaling.knative.dev/minScale"        = var.backend_min_instances
-        "run.googleapis.com/cpu-throttling"       = "false"
-        "run.googleapis.com/startup-cpu-boost"    = "true"
+        "autoscaling.knative.dev/maxScale"     = var.backend_max_instances
+        "autoscaling.knative.dev/minScale"     = var.backend_min_instances
+        "run.googleapis.com/cpu-throttling"    = "false"
+        "run.googleapis.com/startup-cpu-boost" = "true"
       }
-      
+
       labels = {
         environment = var.environment
         component   = "backend"
@@ -445,14 +445,14 @@ resource "google_cloud_run_service" "backend" {
       }
     }
   }
-  
+
   traffic {
     percent         = 100
     latest_revision = true
   }
-  
+
   autogenerate_revision_name = true
-  
+
   depends_on = [
     google_project_service.required_apis,
     google_service_account.backend
@@ -466,30 +466,30 @@ resource "google_cloud_run_service" "backend" {
 resource "google_cloud_run_service" "frontend" {
   name     = "realestate-frontend"
   location = var.region
-  
+
   template {
     spec {
       service_account_name = google_service_account.frontend.email
-      
+
       containers {
         image = "gcr.io/${var.project_id}/realestate-frontend:latest"
-        
+
         # Environment Variables
         env {
           name  = "BACKEND_API_URL"
           value = google_cloud_run_service.backend.status[0].url
         }
-        
+
         env {
           name  = "ENVIRONMENT"
           value = var.environment
         }
-        
+
         env {
           name  = "LOG_LEVEL"
           value = "INFO"
         }
-        
+
         # Resource Limits
         resources {
           limits = {
@@ -497,13 +497,13 @@ resource "google_cloud_run_service" "frontend" {
             memory = "2Gi"
           }
         }
-        
+
         # Port
         ports {
           name           = "http1"
           container_port = 8501
         }
-        
+
         # Startup probe
         startup_probe {
           http_get {
@@ -515,7 +515,7 @@ resource "google_cloud_run_service" "frontend" {
           period_seconds        = 10
           failure_threshold     = 3
         }
-        
+
         # Liveness probe
         liveness_probe {
           http_get {
@@ -528,18 +528,18 @@ resource "google_cloud_run_service" "frontend" {
           failure_threshold     = 3
         }
       }
-      
+
       container_concurrency = 80
       timeout_seconds       = 300
     }
-    
+
     metadata {
       annotations = {
-        "autoscaling.knative.dev/maxScale"     = var.frontend_max_instances
-        "autoscaling.knative.dev/minScale"     = var.frontend_min_instances
-        "run.googleapis.com/cpu-throttling"    = "true"
+        "autoscaling.knative.dev/maxScale"  = var.frontend_max_instances
+        "autoscaling.knative.dev/minScale"  = var.frontend_min_instances
+        "run.googleapis.com/cpu-throttling" = "true"
       }
-      
+
       labels = {
         environment = var.environment
         component   = "frontend"
@@ -547,18 +547,18 @@ resource "google_cloud_run_service" "frontend" {
       }
     }
   }
-  
+
   traffic {
     percent         = 100
     latest_revision = true
   }
-  
+
   autogenerate_revision_name = true
-  
+
   depends_on = [
     google_project_service.required_apis,
     google_service_account.frontend,
-    google_cloud_run_service.backend  # Frontend needs backend URL
+    google_cloud_run_service.backend # Frontend needs backend URL
   ]
 }
 
@@ -589,23 +589,23 @@ resource "google_cloud_run_service_iam_member" "frontend_public" {
 resource "google_cloud_scheduler_job" "model_retraining" {
   name        = "model-retraining-weekly"
   description = "Trigger model retraining every Sunday at 2 AM"
-  schedule    = "0 2 * * 0"  # Every Sunday at 2 AM
+  schedule    = "0 2 * * 0" # Every Sunday at 2 AM
   time_zone   = "America/New_York"
   region      = var.region
-  
+
   http_target {
     http_method = "POST"
     uri         = "${google_cloud_run_service.backend.status[0].url}/train"
-    
+
     oidc_token {
       service_account_email = google_service_account.training.email
     }
   }
-  
+
   retry_config {
     retry_count = 3
   }
-  
+
   depends_on = [
     google_project_service.required_apis,
     google_cloud_run_service.backend
