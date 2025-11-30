@@ -6,41 +6,46 @@ on:
     types: [completed]
 
 permissions:
-  id-token: write
   contents: read
 
 env:
-  PROJECT_ID: ${{ vars.GCP_PROJECT }}
-  REGION: ${{ vars.GCP_REGION }}
-  ARTIFACT_REGISTRY_REPO: ${{ vars.ARTIFACT_REGISTRY_REPO }}
-  CI_SA: ${{ vars.CI_SA }}
+  PROJECT_ID: ${{ secrets.GCP_PROJECT }}
+  REGION: ${{ secrets.GCP_REGION }}
+  ARTIFACT_REGISTRY_REPO: ${{ secrets.ARTIFACT_REGISTRY_REPO }}
 
 jobs:
   deploy:
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Authenticate to GCP with Workload Identity
+      # ================================
+      # Authenticate using Service Account JSON key
+      # ================================
+      - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
         with:
-          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-          service_account: ${{ env.CI_SA }}
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
 
       - name: Setup gcloud CLI
         uses: google-github-actions/setup-gcloud@v2
         with:
-          project_id: ${{ env.PROJECT_ID }}
+          project_id: ${{ secrets.GCP_PROJECT }}
 
+      # ================================
+      # Deploy Backend
+      # ================================
       - name: Deploy backend to Cloud Run
         run: |
-          IMAGE="${{ env.ARTIFACT_REGISTRY_REPO }}/realestate-backend:latest"
-          echo "Deploying backend image: $IMAGE"
+          IMAGE="${ARTIFACT_REGISTRY_REPO}/realestate-backend:latest"
+          echo "Deploying backend: $IMAGE"
+
           gcloud run deploy realestate-backend \
             --image="$IMAGE" \
-            --region=${{ env.REGION }} \
+            --region="$REGION" \
             --platform=managed \
             --allow-unauthenticated \
             --memory=4Gi \
@@ -48,18 +53,34 @@ jobs:
             --timeout=300 \
             --min-instances=2 \
             --max-instances=20 \
-            --set-env-vars="GCS_BUCKET_NAME=${{ env.PROJECT_ID }}-ml-models,GCS_MODEL_PATH=models/latest,ENVIRONMENT=production" \
+            --set-env-vars="GCS_BUCKET_NAME=${PROJECT_ID}-ml-models,GCS_MODEL_PATH=models/latest,ENVIRONMENT=production" \
             --set-secrets="GROQ_API_KEY=groq-api-key:latest"
 
+      # ================================
+      # Fetch Backend URL
+      # ================================
+      - name: Get Backend URL
+        id: backend_url
+        run: |
+          URL=$(gcloud run services describe realestate-backend \
+            --region="$REGION" \
+            --format='value(status.url)')
+          echo "backend_url=$URL" >> $GITHUB_OUTPUT
+
+      # ================================
+      # Deploy Frontend
+      # ================================
       - name: Deploy frontend to Cloud Run
         run: |
-          IMAGE="${{ env.ARTIFACT_REGISTRY_REPO }}/realestate-frontend:latest"
-          echo "Fetching backend URL..."
-          BACKEND_URL=$(gcloud run services describe realestate-backend --region=${{ env.REGION }} --format='value(status.url)')
-          echo "Deploying frontend image: $IMAGE with BACKEND_API_URL=${BACKEND_URL}"
+          IMAGE="${ARTIFACT_REGISTRY_REPO}/realestate-frontend:latest"
+          BACKEND_URL="${{ steps.backend_url.outputs.backend_url }}"
+
+          echo "Deploying frontend: $IMAGE"
+          echo "Using BACKEND_API_URL: $BACKEND_URL"
+
           gcloud run deploy realestate-frontend \
             --image="$IMAGE" \
-            --region=${{ env.REGION }} \
+            --region="$REGION" \
             --platform=managed \
             --allow-unauthenticated \
             --memory=2Gi \

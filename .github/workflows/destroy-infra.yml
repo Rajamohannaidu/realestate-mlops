@@ -1,9 +1,12 @@
-name: Deploy - Terraform
+name: Terraform Destroy (DANGER ZONE)
 
 on:
-  push:
-    branches: [ main ]
   workflow_dispatch:
+    inputs:
+      confirm:
+        description: "⚠️ Type DESTROY to confirm full infrastructure deletion"
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -15,17 +18,23 @@ env:
   TF_STATE_PREFIX: ${{ secrets.TF_STATE_PREFIX }}
 
 jobs:
-  terraform:
-    name: Terraform Plan and Apply
+  destroy:
+    name: Terraform Destroy Infrastructure
     runs-on: ubuntu-latest
 
     steps:
+      # Safety Check
+      - name: Safety Check
+        run: |
+          if [ "${{ github.event.inputs.confirm }}" != "DESTROY" ]; then
+            echo "❌ Confirmation failed. You MUST type DESTROY to proceed."
+            exit 1
+          fi
+
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # ===============================
-      # Authenticate using Service Account JSON Key
-      # ===============================
+      # Authenticate with Service Account Key
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
         with:
@@ -36,14 +45,12 @@ jobs:
         with:
           project_id: ${{ secrets.GCP_PROJECT }}
 
-      - name: Setup Terraform
+      - name: Install Terraform
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: '1.9.0'
 
-      # ===============================
-      # Terraform Init (with Backend)
-      # ===============================
+      # Terraform Init (use matching backend bucket/prefix)
       - name: Terraform Init
         working-directory: infrastructure/terraform
         run: |
@@ -51,28 +58,9 @@ jobs:
             -backend-config="bucket=${TF_BUCKET}" \
             -backend-config="prefix=${TF_STATE_PREFIX}"
 
-      - name: Terraform Format Check
-        working-directory: infrastructure/terraform
-        run: terraform fmt -check
-
-      - name: Terraform Validate
-        working-directory: infrastructure/terraform
-        run: terraform validate
-
-      - name: Terraform Plan
+      - name: Terraform Destroy (Auto-Approve)
         working-directory: infrastructure/terraform
         run: |
-          terraform plan -input=false -out=tfplan \
+          terraform destroy -auto-approve \
             -var="project_id=${PROJECT_ID}" \
             -var="region=${REGION}"
-
-      - name: Upload tfplan artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: tfplan
-          path: infrastructure/terraform/tfplan
-
-      - name: Terraform Apply
-        if: github.ref == 'refs/heads/main'
-        working-directory: infrastructure/terraform
-        run: terraform apply -input=false -auto-approve tfplan
