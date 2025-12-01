@@ -76,23 +76,9 @@ gcloud iam service-accounts delete $TERRAFORM_SA --quiet || true
 gcloud iam service-accounts delete $CICD_SA --quiet || true
 
 
-# ===============================================
-# 4. Delete Workload Identity Provider & Pool
-# ===============================================
-echo "Deleting Workload Identity pool and provider..."
-
-gcloud iam workload-identity-pools providers delete $PROVIDER_NAME \
-  --location="global" \
-  --workload-identity-pool=$POOL_NAME \
-  --quiet || true
-
-gcloud iam workload-identity-pools delete $POOL_NAME \
-  --location="global" \
-  --quiet || true
-
 
 # ===============================================
-# 5. Delete Artifact Registry Repo
+# 4. Delete Artifact Registry Repo
 # ===============================================
 echo "Deleting Artifact Registry repository..."
 
@@ -102,7 +88,7 @@ gcloud artifacts repositories delete $REPO_NAME \
 
 
 # ===============================================
-# 6. Delete Terraform backend bucket
+# 5. Delete Terraform backend bucket
 # ===============================================
 echo "Deleting Terraform backend bucket..."
 

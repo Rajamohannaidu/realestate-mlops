@@ -14,13 +14,33 @@ import sys
 import os
 from datetime import datetime
 
-# Add parent directory to path
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# Add backend/src to path
+import sys
+import os
+from pathlib import Path
 
-from src.data_preprocessing import RealEstateDataPreprocessor
-from src.predictive_models import RealEstatePredictiveModels
-from src.investment_analytics import InvestmentAnalytics
-from src.explainability import ModelExplainability
+# Get absolute paths
+current_file = Path(__file__).resolve()  # frontend/app/streamlit_app.py
+app_dir = current_file.parent            # frontend/app/
+frontend_dir = app_dir.parent            # frontend/
+project_root = frontend_dir.parent       # project root
+backend_src = project_root / "backend" / "src"  # backend/src/
+
+# Add backend/src to Python path
+if str(backend_src) not in sys.path:
+    sys.path.insert(0, str(backend_src))
+
+# Verify the path exists
+if not backend_src.exists():
+    raise ImportError(f"Backend src directory not found at {backend_src}")
+
+print(f"✓ Loading modules from: {backend_src}")
+
+from training.chatbot import RealEstateInvestmentChatbot
+from training.data_preprocessing import RealEstateDataPreprocessor
+from training.predictive_models import RealEstatePredictiveModels
+from training.investment_analytics import InvestmentAnalytics
+from training.explainability import ModelExplainability
 
 try:
     from src.chatbot import RealEstateInvestmentChatbot

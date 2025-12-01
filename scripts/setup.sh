@@ -50,22 +50,7 @@ gcloud projects add-iam-policy-binding $PROJECT_ID \
 
 
 # ===============================================
-# 4. Workload Identity Pool + GitHub Provider
-# ===============================================
-gcloud iam workload-identity-pools create github-pool \
-  --location="global" \
-  --display-name="GitHub OIDC pool"
-
-gcloud iam workload-identity-pools providers create-oidc github-provider \
-  --location="global" \
-  --workload-identity-pool="github-pool" \
-  --display-name="GitHub Provider" \
-  --issuer-uri="https://token.actions.githubusercontent.com" \
-  --attribute-mapping="google.subject=assertion.sub,attribute.repository=assertion.repository"
-
-
-# ===============================================
-# 5. Bind Terraform SA → GitHub Repository
+# 4. Bind Terraform SA → GitHub Repository
 # ===============================================
 REPOSITORY_ATTR="projects/${PROJECT_NUMBER}/locations/global/workloadIdentityPools/github-pool/attribute.repository/${GITHUB_ORG}/${GITHUB_REPO}"
 
@@ -75,7 +60,7 @@ gcloud iam service-accounts add-iam-policy-binding ${SA_EMAIL} \
 
 
 # ===============================================
-# 6. CI/CD Service Account (for Build & Deploy)
+# 5. CI/CD Service Account (for Build & Deploy)
 # ===============================================
 gcloud iam service-accounts create cicdservice \
   --display-name="CI/CD Service Account"
