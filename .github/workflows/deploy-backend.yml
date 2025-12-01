@@ -12,7 +12,7 @@ env:
   PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
   REGION: us-central1
   SERVICE_NAME: realestate-backend
-  ARTIFACT_REPO: realestate-repo
+  ARTIFACT_REGISTRY_REPO: realestate-repo
 
 permissions:
   id-token: write
@@ -40,7 +40,7 @@ jobs:
 
       # FIX: Build dynamic REPO string here
       - name: Set IMAGE REPO
-        run: echo "REPO=us-central1-docker.pkg.dev/${PROJECT_ID}/${ARTIFACT_REPO}" >> $GITHUB_ENV
+        run: echo "REPO=us-central1-docker.pkg.dev/${PROJECT_ID}/${ARTIFACT_REGISTRY_REPO}" >> $GITHUB_ENV
 
       - name: Build Backend Image
         run: |

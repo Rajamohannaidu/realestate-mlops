@@ -13,7 +13,7 @@ env:
   PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
   REGION: us-central1
   SERVICE_NAME: realestate-frontend
-  ARTIFACT_REPO: realestate-repo
+  ARTIFACT_REGISTRY_REPO: realestate-repo
 
 jobs:
   deploy-frontend:
@@ -56,7 +56,7 @@ jobs:
       # Step 5: Generate correct REPO PATH
       # ---------------------------------------------------------------
       - name: Set Repo Path
-        run: echo "REPO=us-central1-docker.pkg.dev/${PROJECT_ID}/${ARTIFACT_REPO}" >> $GITHUB_ENV
+        run: echo "REPO=us-central1-docker.pkg.dev/${PROJECT_ID}/${ARTIFACT_REGISTRY_REPO}" >> $GITHUB_ENV
 
       # ---------------------------------------------------------------
       # Step 6: Get Backend URL
