@@ -14,7 +14,6 @@ env:
   PROJECT_ID: ${{ secrets.GCP_PROJECT }}
   REGION: ${{ secrets.GCP_REGION }}
   ARTIFACT_REGISTRY_REPO: ${{ secrets.ARTIFACT_REGISTRY_REPO }}
-  CI_SA: ${{ secrets.CI_SA }}
 
 jobs:
   test:
@@ -29,10 +28,9 @@ jobs:
         with:
           python-version: '3.10'
 
-      # Backend requirements
+      # Backend tests
       - name: Install backend dependencies
         run: |
-          python -m pip install --upgrade pip
           pip install -r backend/requirements.backend.txt
 
       - name: Run backend tests
@@ -40,10 +38,9 @@ jobs:
           cd backend
           pytest -q || true
 
-      # Frontend requirements install test
+      # Frontend test (dependency validation)
       - name: Validate frontend dependencies
         run: |
-          python -m pip install --upgrade pip
           pip install -r frontend/requirements.frontend.txt
 
   build-and-push:
@@ -54,7 +51,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Authenticate with Service Account JSON key
+      # Authenticate with Service Account
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
         with:
@@ -63,46 +60,44 @@ jobs:
       - name: Setup gcloud SDK
         uses: google-github-actions/setup-gcloud@v2
         with:
-          project_id: ${{ secrets.GCP_PROJECT }}
+          project_id: ${{ env.PROJECT_ID }}
 
-      # Use Artifact Registry
-      - name: Configure Docker for Artifact Registry
-        run: |
-          gcloud --project=${PROJECT_ID} auth configure-docker us-central1-docker.pkg.dev -q
+      # Configure Docker for Artifact Registry
+      - name: Configure Docker
+        run: gcloud auth configure-docker us-central1-docker.pkg.dev -q
 
-      # ============================
+      # ------------------------------
       # Backend Image
-      # ============================
+      # ------------------------------
       - name: Build backend Docker image
         run: |
-          BACKEND_SHA_IMAGE="${ARTIFACT_REGISTRY_REPO}/realestate-backend:${{ github.sha }}"
-          BACKEND_LATEST_IMAGE="${ARTIFACT_REGISTRY_REPO}/realestate-backend:latest"
-
-          docker build -f backend/Dockerfile.backend -t "$BACKEND_SHA_IMAGE" ./backend
-          docker tag "$BACKEND_SHA_IMAGE" "$BACKEND_LATEST_IMAGE"
+          docker build \
+            -f backend/Dockerfile.backend \
+            -t ${ARTIFACT_REGISTRY_REPO}/realestate-backend:${{ github.sha }} \
+            -t ${ARTIFACT_REGISTRY_REPO}/realestate-backend:latest \
+            backend
 
       - name: Push backend images
         run: |
-          docker push "${ARTIFACT_REGISTRY_REPO}/realestate-backend:${{ github.sha }}"
-          docker push "${ARTIFACT_REGISTRY_REPO}/realestate-backend:latest"
+          docker push ${ARTIFACT_REGISTRY_REPO}/realestate-backend:${{ github.sha }}
+          docker push ${ARTIFACT_REGISTRY_REPO}/realestate-backend:latest
 
-      # ============================
+      # ------------------------------
       # Frontend Image
-      # ============================
+      # ------------------------------
       - name: Build frontend Docker image
         run: |
-          FRONTEND_SHA_IMAGE="${ARTIFACT_REGISTRY_REPO}/realestate-frontend:${{ github.sha }}"
-          FRONTEND_LATEST_IMAGE="${ARTIFACT_REGISTRY_REPO}/realestate-frontend:latest"
-
-          docker build -f frontend/Dockerfile.frontend -t "$FRONTEND_SHA_IMAGE" ./frontend
-          docker tag "$FRONTEND_SHA_IMAGE" "$FRONTEND_LATEST_IMAGE"
+          docker build \
+            -f frontend/Dockerfile.frontend \
+            -t ${ARTIFACT_REGISTRY_REPO}/realestate-frontend:${{ github.sha }} \
+            -t ${ARTIFACT_REGISTRY_REPO}/realestate-frontend:latest \
+            frontend
 
       - name: Push frontend images
         run: |
-          docker push "${ARTIFACT_REGISTRY_REPO}/realestate-frontend:${{ github.sha }}"
-          docker push "${ARTIFACT_REGISTRY_REPO}/realestate-frontend:latest"
+          docker push ${ARTIFACT_REGISTRY_REPO}/realestate-frontend:${{ github.sha }}
+          docker push ${ARTIFACT_REGISTRY_REPO}/realestate-frontend:latest
 
-      # Export output tags
       - name: Publish image outputs
         run: |
           echo "backend_image=${ARTIFACT_REGISTRY_REPO}/realestate-backend:latest" >> $GITHUB_OUTPUT
