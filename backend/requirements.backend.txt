@@ -1,8 +1,9 @@
+# backend/requirements.txt
 # ============================================================================
 # BACKEND REQUIREMENTS - ML Models, Analytics, API Dependencies
 # ============================================================================
 # PURPOSE: All packages for ML inference, investment analytics, and API
-# COMPATIBLE WITH: Python 3.12 + Pydantic v1 (for TensorFlow compatibility)
+# COMPATIBLE WITH: Python 3.11 + Pydantic v1 (for TensorFlow compatibility)
 # ============================================================================
 
 # === FastAPI & API Framework ===
@@ -15,7 +16,7 @@ httpx==0.26.0                       # HTTP client
 pydantic==1.10.13                   # DO NOT UPGRADE - TensorFlow requires v1
 typing-extensions==4.11.0           # Type hints support
 
-# === Core ML/DL Frameworks (Your existing versions) ===
+# === Core ML/DL Frameworks ===
 numpy==1.26.4                       # Numerical computing
 tensorflow==2.16.1                  # Deep learning (Neural Network model)
 pandas==2.2.2                       # Data manipulation
@@ -37,6 +38,7 @@ python-dotenv==1.0.0                # Environment variables
 google-cloud-storage==2.14.0        # GCS for model storage
 google-cloud-logging==3.9.0         # Cloud Logging
 google-cloud-aiplatform==1.42.1     # Vertex AI (for training pipelines)
+google-cloud-secret-manager==2.17.0 # Secret Manager
 
 # === Data Processing & Utilities ===
 joblib==1.4.2                       # Model serialization

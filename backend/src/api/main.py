@@ -7,7 +7,7 @@ WITH GRACEFUL MODEL LOADING FOR CLOUD RUN
 
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator, ConfigDict
 import joblib
 import numpy as np
 import pandas as pd
@@ -66,22 +66,24 @@ class PropertyInput(BaseModel):
     prefarea: str = Field(..., description="In preferred area? (yes/no)")
     furnishingstatus: str = Field(..., description="Furnishing status (furnished/semi-furnished/unfurnished)")
     
-    @validator('mainroad', 'guestroom', 'basement', 'hotwaterheating', 
-               'airconditioning', 'prefarea')
+    @field_validator('mainroad', 'guestroom', 'basement', 'hotwaterheating', 
+                     'airconditioning', 'prefarea')
+    @classmethod
     def validate_yes_no(cls, v):
         if v.lower() not in ['yes', 'no']:
             raise ValueError('Must be "yes" or "no"')
         return v.lower()
     
-    @validator('furnishingstatus')
+    @field_validator('furnishingstatus')
+    @classmethod
     def validate_furnishing(cls, v):
         valid = ['furnished', 'semi-furnished', 'unfurnished']
         if v.lower() not in valid:
             raise ValueError(f'Must be one of {valid}')
         return v.lower()
     
-    class Config:
-        schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "area": 7420,
                 "bedrooms": 4,
@@ -97,6 +99,7 @@ class PropertyInput(BaseModel):
                 "furnishingstatus": "furnished"
             }
         }
+    )
 
 class InvestmentInput(BaseModel):
     """Input for investment analysis"""
@@ -112,8 +115,8 @@ class InvestmentInput(BaseModel):
     annual_appreciation_rate: float = Field(3, ge=-10, le=20)
     holding_period_years: int = Field(10, ge=1, le=50)
     
-    class Config:
-        schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "purchase_price": 5000000,
                 "down_payment_percent": 20,
@@ -128,6 +131,7 @@ class InvestmentInput(BaseModel):
                 "holding_period_years": 10
             }
         }
+    )
 
 class PredictionResponse(BaseModel):
     predicted_price: float
