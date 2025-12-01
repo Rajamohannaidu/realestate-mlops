@@ -4,58 +4,42 @@
 
 FROM python:3.11-slim
 
-# Set working directory
 WORKDIR /app
 
-# Install lightweight system dependencies
+# Install minimal dependencies
 RUN apt-get update && apt-get install -y \
     gcc \
     g++ \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy Python dependencies first (better caching)
+# Copy and install dependencies
 COPY requirements.frontend.txt .
-
-# Install Python dependencies
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.frontend.txt
 
 # Copy Streamlit app
-COPY app/ ./app/
+COPY app ./app
 
-# Always ensure .streamlit exists inside container
-RUN mkdir -p .streamlit
-
-# -----------------------------------------------------
-# SAFE COPY: works even if .streamlit folder is missing
-# -----------------------------------------------------
-# Docker COPY cannot use "|| true", so we use shell logic
-RUN if [ -d "/app/.streamlit" ]; then \
-        echo ".streamlit folder exists in build context"; \
-    else \
-        echo "No .streamlit folder found – skipping copy"; \
-    fi
-
-# Cloud Run requires Streamlit cache folder
+# Create .streamlit folders
+RUN mkdir -p /app/.streamlit
 RUN mkdir -p /root/.streamlit
 
-# Environment variables
+# Cloud Run ENV — it injects PORT automatically
 ENV PYTHONUNBUFFERED=1
-ENV STREAMLIT_SERVER_PORT=8501
-ENV STREAMLIT_SERVER_ADDRESS=0.0.0.0
+ENV PORT=8080
 
-# Expose Streamlit port
-EXPOSE 8501
+# Expose Cloud Run port
+EXPOSE 8080
 
-# Health check for Cloud Run
+# Cloud Run health check (correct port)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-  CMD curl -f http://localhost:8501/_stcore/health || exit 1
+  CMD curl -f http://localhost:${PORT}/_stcore/health || exit 1
 
-# Run Streamlit app in Cloud Run
-CMD ["streamlit", "run", "app/streamlit_app.py", \
-     "--server.port=8501", \
-     "--server.address=0.0.0.0", \
-     "--server.enableCORS=false", \
-     "--server.enableXsrfProtection=false", \
-     "--server.headless=true"]
+# ENTRYPOINT — must use $PORT (Shell form required!)
+CMD streamlit run app/streamlit_app.py \
+    --server.port=$PORT \
+    --server.address=0.0.0.0 \
+    --server.enableCORS=false \
+    --server.enableXsrfProtection=false \
+    --server.headless=true
