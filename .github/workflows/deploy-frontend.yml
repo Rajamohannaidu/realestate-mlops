@@ -1,9 +1,3 @@
-# ============================================================================
-# GITHUB ACTIONS - Auto Deploy Frontend on Push
-# ============================================================================
-# PURPOSE: Deploy Streamlit frontend to Cloud Run on every push to main.
-# ============================================================================
-
 name: Deploy Frontend (Streamlit)
 
 on:
@@ -19,7 +13,7 @@ env:
   PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
   REGION: us-central1
   SERVICE_NAME: realestate-frontend
-  REPO: us-central1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/realestate-repo
+  ARTIFACT_REPO: realestate-repo
 
 jobs:
   deploy-frontend:
@@ -53,31 +47,36 @@ jobs:
           project_id: ${{ env.PROJECT_ID }}
 
       # ---------------------------------------------------------------
-      # Step 4: Configure Docker to push to Artifact Registry
+      # Step 4: Configure Docker for Artifact Registry
       # ---------------------------------------------------------------
       - name: Configure Docker for Artifact Registry
-        run: |
-          gcloud auth configure-docker us-central1-docker.pkg.dev -q
+        run: gcloud auth configure-docker us-central1-docker.pkg.dev -q
 
       # ---------------------------------------------------------------
-      # Step 5: Get Backend URL (fallback to local for dev)
+      # Step 5: Generate correct REPO PATH
+      # ---------------------------------------------------------------
+      - name: Set Repo Path
+        run: echo "REPO=us-central1-docker.pkg.dev/${PROJECT_ID}/${ARTIFACT_REPO}" >> $GITHUB_ENV
+
+      # ---------------------------------------------------------------
+      # Step 6: Get Backend URL
       # ---------------------------------------------------------------
       - name: Get Backend URL
         id: backend-url
         run: |
           BACKEND=$(gcloud run services describe realestate-backend \
             --region=${{ env.REGION }} \
-            --format='value(status.url)' 2>/dev/null || true)
+            --format="value(status.url)" 2>/dev/null || true)
 
           if [ -z "$BACKEND" ]; then
-            echo "⚠ Backend not found. Using default local URL."
+            echo "⚠ Backend not found. Using local URL."
             BACKEND="http://localhost:8080"
           fi
 
           echo "url=$BACKEND" >> $GITHUB_OUTPUT
 
       # ---------------------------------------------------------------
-      # Step 6: Build Docker Image
+      # Step 7: Build Docker Image
       # ---------------------------------------------------------------
       - name: Build Frontend Docker Image
         run: |
@@ -88,7 +87,7 @@ jobs:
             frontend
 
       # ---------------------------------------------------------------
-      # Step 7: Push to Artifact Registry
+      # Step 8: Push Image
       # ---------------------------------------------------------------
       - name: Push Frontend Image
         run: |
@@ -96,14 +95,14 @@ jobs:
           docker push $REPO/${{ env.SERVICE_NAME }}:latest
 
       # ---------------------------------------------------------------
-      # Step 8: Deploy to Cloud Run
+      # Step 9: Deploy to Cloud Run
       # ---------------------------------------------------------------
       - name: Deploy to Cloud Run
         run: |
           gcloud run deploy ${{ env.SERVICE_NAME }} \
             --image=$REPO/${{ env.SERVICE_NAME }}:${{ github.sha }} \
-            --platform=managed \
             --region=${{ env.REGION }} \
+            --platform=managed \
             --allow-unauthenticated \
             --memory=2Gi \
             --cpu=2 \
@@ -113,27 +112,27 @@ jobs:
             --set-env-vars="BACKEND_API_URL=${{ steps.backend-url.outputs.url }}"
 
       # ---------------------------------------------------------------
-      # Step 9: Retrieve Deployed URL
+      # Step 10: Get URL
       # ---------------------------------------------------------------
       - name: Get Frontend URL
         id: service-url
         run: |
           URL=$(gcloud run services describe ${{ env.SERVICE_NAME }} \
             --region=${{ env.REGION }} \
-            --format='value(status.url)')
+            --format="value(status.url)")
           echo "url=$URL" >> $GITHUB_OUTPUT
 
       # ---------------------------------------------------------------
-      # Step 10: Test Deployed Service
+      # Step 11: Validate Deployment
       # ---------------------------------------------------------------
       - name: Validate Deployment
         run: |
-          echo "Waiting for service to warm up..."
+          echo "Waiting for service..."
           sleep 10
           curl -f ${{ steps.service-url.outputs.url }} || exit 1
 
       # ---------------------------------------------------------------
-      # Step 11: Deployment Summary
+      # Step 12: Summary
       # ---------------------------------------------------------------
       - name: Deployment Summary
         run: |

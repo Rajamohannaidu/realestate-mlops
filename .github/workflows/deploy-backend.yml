@@ -1,11 +1,3 @@
-# ============================================================================
-# GITHUB ACTIONS - Auto Deploy Backend on Push
-# ============================================================================
-# PURPOSE: Automatically deploy backend when backend/ files change
-# TRIGGER: Push to main branch
-# DEPLOYS: FastAPI ML service to Cloud Run
-# ============================================================================
-
 name: Deploy Backend (FastAPI + ML)
 
 on:
@@ -20,7 +12,7 @@ env:
   PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
   REGION: us-central1
   SERVICE_NAME: realestate-backend
-  REPO: us-central1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/realestate-repo
+  ARTIFACT_REPO: realestate-repo
 
 permissions:
   id-token: write
@@ -31,60 +23,43 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # -------------------------------------------------------
-      # Step 1: Checkout Code
-      # -------------------------------------------------------
       - uses: actions/checkout@v4
 
-      # -------------------------------------------------------
-      # Step 2: Authenticate to GCP
-      # -------------------------------------------------------
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
 
-      # -------------------------------------------------------
-      # Step 3: Setup gcloud
-      # -------------------------------------------------------
       - name: Setup gcloud CLI
         uses: google-github-actions/setup-gcloud@v2
         with:
-          project_id: ${{ secrets.GCP_PROJECT_ID }}
+          project_id: ${{ env.PROJECT_ID }}
 
-      # -------------------------------------------------------
-      # Step 4: Configure Docker for Artifact Registry
-      # -------------------------------------------------------
       - name: Configure Docker for Artifact Registry
         run: gcloud auth configure-docker us-central1-docker.pkg.dev
 
-      # -------------------------------------------------------
-      # Step 5: Build Backend Docker Image
-      # -------------------------------------------------------
+      # FIX: Build dynamic REPO string here
+      - name: Set IMAGE REPO
+        run: echo "REPO=us-central1-docker.pkg.dev/${PROJECT_ID}/${ARTIFACT_REPO}" >> $GITHUB_ENV
+
       - name: Build Backend Image
         run: |
           docker build \
             -f backend/Dockerfile.backend \
-            -t $REPO/${{ env.SERVICE_NAME }}:${{ github.sha }} \
-            -t $REPO/${{ env.SERVICE_NAME }}:latest \
+            -t $REPO/${SERVICE_NAME}:${{ github.sha }} \
+            -t $REPO/${SERVICE_NAME}}:latest \
             backend
 
-      # -------------------------------------------------------
-      # Step 6: Push to Artifact Registry
-      # -------------------------------------------------------
       - name: Push Backend Image
         run: |
-          docker push $REPO/${{ env.SERVICE_NAME }}:${{ github.sha }}
-          docker push $REPO/${{ env.SERVICE_NAME }}:latest
+          docker push $REPO/${SERVICE_NAME}:${{ github.sha }}
+          docker push $REPO/${SERVICE_NAME}:latest
 
-      # -------------------------------------------------------
-      # Step 7: Deploy to Cloud Run
-      # -------------------------------------------------------
       - name: Deploy to Cloud Run
         run: |
-          gcloud run deploy ${{ env.SERVICE_NAME }} \
-            --image=$REPO/${{ env.SERVICE_NAME }}:${{ github.sha }} \
-            --region=${{ env.REGION }} \
+          gcloud run deploy ${SERVICE_NAME} \
+            --image=$REPO/${SERVICE_NAME}:${{ github.sha }} \
+            --region=${REGION} \
             --platform=managed \
             --allow-unauthenticated \
             --memory=4Gi \
@@ -97,50 +72,21 @@ jobs:
             --set-env-vars="ENVIRONMENT=production" \
             --set-secrets="GROQ_API_KEY=groq-api-key:latest"
 
-      # -------------------------------------------------------
-      # Step 8: Fetch Backend URL
-      # -------------------------------------------------------
       - name: Get Backend URL
         id: backend-url
         run: |
-          URL=$(gcloud run services describe ${{ env.SERVICE_NAME }} \
-            --region=${{ env.REGION }} \
+          URL=$(gcloud run services describe ${SERVICE_NAME} \
+            --region=${REGION} \
             --format='value(status.url)')
           echo "url=$URL" >> $GITHUB_OUTPUT
 
-      # -------------------------------------------------------
-      # Step 9: Update Frontend with Backend URL
-      # -------------------------------------------------------
-      - name: Update Frontend Environment Variable
-        run: |
-          gcloud run services update realestate-frontend \
-            --region=${{ env.REGION }} \
-            --update-env-vars="BACKEND_API_URL=${{ steps.backend-url.outputs.url }}" \
-            --quiet || echo "⚠ Frontend not deployed yet. Skipping update."
-
-      # -------------------------------------------------------
-      # Step 10: Validate Backend Health
-      # -------------------------------------------------------
-      - name: Test Backend Health Check
+      - name: Test Backend Health
         run: |
           sleep 10
           curl -f ${{ steps.backend-url.outputs.url }}/health || exit 1
 
-      # -------------------------------------------------------
-      # Step 11: Validate Model Endpoint
-      # -------------------------------------------------------
-      - name: Validate /models/info Endpoint
-        run: |
-          curl -f ${{ steps.backend-url.outputs.url }}/models/info || exit 1
-
-      # -------------------------------------------------------
-      # Step 12: Summary
-      # -------------------------------------------------------
       - name: Deployment Summary
         run: |
-          echo "==============================================="
           echo "🎉 Backend Deployment Complete!"
           echo "🌐 URL: ${{ steps.backend-url.outputs.url }}"
-          echo "📘 Docs: ${{ steps.backend-url.outputs.url }}/docs"
-          echo "📦 Image: $REPO/${{ env.SERVICE_NAME }}:${{ github.sha }}"
-          echo "==============================================="
+          echo "📦 Image: $REPO/${SERVICE_NAME}:${{ github.sha }}"
