@@ -38,7 +38,7 @@ jobs:
       - name: Configure Docker for Artifact Registry
         run: gcloud auth configure-docker us-central1-docker.pkg.dev
 
-      # FIX: Build dynamic REPO string here
+      # Build proper repo path
       - name: Set IMAGE REPO
         run: echo "REPO=us-central1-docker.pkg.dev/${PROJECT_ID}/${ARTIFACT_REGISTRY_REPO}" >> $GITHUB_ENV
 
@@ -47,7 +47,7 @@ jobs:
           docker build \
             -f backend/Dockerfile.backend \
             -t $REPO/${SERVICE_NAME}:${{ github.sha }} \
-            -t $REPO/${SERVICE_NAME}}:latest \
+            -t $REPO/${SERVICE_NAME}:latest \
             backend
 
       - name: Push Backend Image
