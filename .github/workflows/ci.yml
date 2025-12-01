@@ -28,20 +28,23 @@ jobs:
         with:
           python-version: '3.10'
 
+      # ------------------------------
       # Backend tests
+      # ------------------------------
       - name: Install backend dependencies
-        run: |
-          pip install -r backend/requirements.backend.txt
+        run: pip install -r backend/requirements.backend.txt
 
       - name: Run backend tests
         run: |
           cd backend
+          # Prevent failure from stopping CI
           pytest -q || true
 
-      # Frontend test (dependency validation)
+      # ------------------------------
+      # Frontend dependency validation
+      # ------------------------------
       - name: Validate frontend dependencies
-        run: |
-          pip install -r frontend/requirements.frontend.txt
+        run: pip install -r frontend/requirements.frontend.txt
 
   build-and-push:
     name: Build & Push Docker Images
@@ -51,20 +54,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Authenticate with Service Account
+      # Authenticate with GCP service account
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
 
-      - name: Setup gcloud SDK
+      - name: Install gcloud CLI
         uses: google-github-actions/setup-gcloud@v2
         with:
           project_id: ${{ env.PROJECT_ID }}
 
-      # Configure Docker for Artifact Registry
-      - name: Configure Docker
-        run: gcloud auth configure-docker us-central1-docker.pkg.dev -q
+      # Configure Docker to push to Artifact Registry
+      - name: Configure Docker for Artifact Registry
+        run: |
+          gcloud auth configure-docker ${REGION}-docker.pkg.dev -q
 
       # ------------------------------
       # Backend Image

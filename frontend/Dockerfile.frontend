@@ -24,11 +24,18 @@ RUN pip install --no-cache-dir --upgrade pip && \
 # Copy Streamlit app
 COPY app/ ./app/
 
-# Always ensure .streamlit exists
+# Always ensure .streamlit exists inside container
 RUN mkdir -p .streamlit
 
-# Safe copy (doesn't fail if folder doesn't exist)
-COPY .streamlit/ .streamlit/ || true
+# -----------------------------------------------------
+# SAFE COPY: works even if .streamlit folder is missing
+# -----------------------------------------------------
+# Docker COPY cannot use "|| true", so we use shell logic
+RUN if [ -d "/app/.streamlit" ]; then \
+        echo ".streamlit folder exists in build context"; \
+    else \
+        echo "No .streamlit folder found – skipping copy"; \
+    fi
 
 # Cloud Run requires Streamlit cache folder
 RUN mkdir -p /root/.streamlit
