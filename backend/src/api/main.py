@@ -2,6 +2,7 @@
 """
 Complete FastAPI Backend for Real Estate Investment Advisor
 Handles all ML predictions, analytics, and explainability
+WITH GRACEFUL MODEL LOADING FOR CLOUD RUN
 """
 
 from fastapi import FastAPI, HTTPException, BackgroundTasks
@@ -16,6 +17,7 @@ import sys
 from typing import List, Optional, Dict, Any
 from google.cloud import storage
 import logging
+from datetime import datetime
 
 # Add parent directory to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'training'))
@@ -163,12 +165,22 @@ class ChatResponse(BaseModel):
     response: str
     context_used: bool
 
+class ModelStatus(BaseModel):
+    models_loaded: bool
+    preprocessor_loaded: bool
+    analytics_available: bool
+    explainability_available: bool
+    chatbot_available: bool
+    model_info: Optional[Dict[str, Any]] = None
+    last_loaded: Optional[str] = None
+    error_message: Optional[str] = None
+
 # ============================================================================
-# Model Manager
+# Model Manager with Graceful Loading
 # ============================================================================
 
 class ModelManager:
-    """Manages all ML models and components"""
+    """Manages all ML models and components with graceful degradation"""
     
     def __init__(self):
         self.preprocessor = None
@@ -177,54 +189,104 @@ class ModelManager:
         self.explainability = None
         self.chatbot = None
         self.metadata = None
-        self.load_all_models()
+        self.models_loaded = False
+        self.last_loaded = None
+        self.load_error = None
+        
+        # Configuration
+        self.allow_startup_without_models = os.getenv(
+            'ALLOW_STARTUP_WITHOUT_MODELS', 
+            'true'
+        ).lower() == 'true'
+        
+        self.bucket_name = os.getenv('GCS_BUCKET_NAME')
+        self.gcs_model_path = os.getenv('GCS_MODEL_PATH', 'models/latest')
+        self.local_model_path = os.getenv('LOCAL_MODEL_PATH', 'models/saved_models')
     
-    def download_from_gcs(self, bucket_name, gcs_path, local_path):
+    def download_from_gcs(self) -> bool:
         """Download models from GCS"""
         try:
+            if not self.bucket_name:
+                logger.warning("GCS_BUCKET_NAME not set, skipping GCS download")
+                return False
+            
+            logger.info(f"Downloading models from gs://{self.bucket_name}/{self.gcs_model_path}")
             storage_client = storage.Client()
-            bucket = storage_client.bucket(bucket_name)
+            bucket = storage_client.bucket(self.bucket_name)
             
-            os.makedirs(local_path, exist_ok=True)
+            os.makedirs(self.local_model_path, exist_ok=True)
             
-            blobs = bucket.list_blobs(prefix=gcs_path)
+            blobs = list(bucket.list_blobs(prefix=self.gcs_model_path))
+            
+            if not blobs:
+                logger.warning(f"No files found in gs://{self.bucket_name}/{self.gcs_model_path}")
+                return False
+            
+            downloaded_count = 0
             for blob in blobs:
                 if not blob.name.endswith('/'):
                     filename = os.path.basename(blob.name)
-                    local_file = os.path.join(local_path, filename)
+                    local_file = os.path.join(self.local_model_path, filename)
                     blob.download_to_filename(local_file)
-                    logger.info(f"Downloaded {filename}")
+                    logger.info(f"✓ Downloaded {filename}")
+                    downloaded_count += 1
+            
+            logger.info(f"Successfully downloaded {downloaded_count} files from GCS")
+            return downloaded_count > 0
+            
         except Exception as e:
-            logger.error(f"Error downloading from GCS: {e}")
-            raise
+            logger.error(f"Error downloading from GCS: {e}", exc_info=True)
+            return False
     
-    def load_all_models(self):
+    def load_all_models(self) -> bool:
         """Load all models and components"""
         try:
-            model_path = 'models/saved_models'
+            logger.info("=" * 60)
+            logger.info("Starting model loading process...")
+            logger.info("=" * 60)
             
-            # Download from GCS if specified
-            bucket_name = os.getenv('GCS_BUCKET_NAME')
-            gcs_model_path = os.getenv('GCS_MODEL_PATH')
+            # Try to download from GCS if configured
+            if self.bucket_name:
+                gcs_success = self.download_from_gcs()
+                if not gcs_success:
+                    logger.warning("GCS download failed or returned no files")
             
-            if bucket_name and gcs_model_path:
-                logger.info("Downloading models from GCS...")
-                self.download_from_gcs(bucket_name, gcs_model_path, model_path)
+            # Check if local models exist
+            if not os.path.exists(self.local_model_path):
+                raise FileNotFoundError(f"Model path not found: {self.local_model_path}")
+            
+            # Check for required files
+            required_files = ['preprocessor.pkl', 'metadata.json']
+            missing_files = [
+                f for f in required_files 
+                if not os.path.exists(os.path.join(self.local_model_path, f))
+            ]
+            
+            if missing_files:
+                raise FileNotFoundError(f"Missing required files: {missing_files}")
             
             # Load preprocessor
             logger.info("Loading preprocessor...")
             self.preprocessor = joblib.load(
-                os.path.join(model_path, 'preprocessor.pkl')
+                os.path.join(self.local_model_path, 'preprocessor.pkl')
             )
+            logger.info("✓ Preprocessor loaded")
             
             # Load predictive models
             logger.info("Loading ML models...")
             self.models = RealEstatePredictiveModels()
-            self.models.load_models(model_path)
+            self.models.load_models(self.local_model_path)
+            logger.info("✓ ML models loaded")
             
             # Initialize analytics
             logger.info("Initializing analytics...")
             self.analytics = InvestmentAnalytics()
+            logger.info("✓ Analytics initialized")
+            
+            # Load metadata
+            with open(os.path.join(self.local_model_path, 'metadata.json'), 'r') as f:
+                self.metadata = json.load(f)
+            logger.info("✓ Metadata loaded")
             
             # Initialize explainability
             logger.info("Initializing explainability...")
@@ -232,27 +294,80 @@ class ModelManager:
                 model=self.models.models[self.models.best_model_name],
                 preprocessor=self.preprocessor
             )
+            logger.info("✓ Explainability initialized")
             
             # Initialize chatbot
             logger.info("Initializing chatbot...")
             groq_api_key = os.getenv('GROQ_API_KEY')
             if groq_api_key:
                 self.chatbot = RealEstateInvestmentChatbot(api_key=groq_api_key)
+                logger.info("✓ Chatbot initialized")
             else:
-                logger.warning("Groq API key not found, chatbot disabled")
+                logger.warning("⚠ Groq API key not found, chatbot disabled")
             
-            # Load metadata
-            with open(os.path.join(model_path, 'metadata.json'), 'r') as f:
-                self.metadata = json.load(f)
+            # Mark as successfully loaded
+            self.models_loaded = True
+            self.last_loaded = datetime.utcnow().isoformat()
+            self.load_error = None
             
-            logger.info("All models loaded successfully!")
+            logger.info("=" * 60)
+            logger.info("✅ All models loaded successfully!")
             logger.info(f"Best model: {self.metadata['best_model']}")
+            logger.info("=" * 60)
+            
+            return True
             
         except Exception as e:
-            logger.error(f"Error loading models: {e}")
-            raise
+            self.load_error = str(e)
+            logger.error("=" * 60)
+            logger.error(f"❌ Error loading models: {e}")
+            logger.error("=" * 60)
+            
+            if self.allow_startup_without_models:
+                logger.warning("⚠ Continuing without models (ALLOW_STARTUP_WITHOUT_MODELS=true)")
+                logger.warning("⚠ API will be available but predictions will fail")
+                logger.warning("⚠ Upload models and call POST /admin/reload to activate")
+                return False
+            else:
+                logger.error("❌ ALLOW_STARTUP_WITHOUT_MODELS=false, startup will fail")
+                raise
+    
+    def reload_models(self) -> bool:
+        """Reload models from GCS"""
+        logger.info("Reloading models...")
+        
+        # Reset state
+        self.preprocessor = None
+        self.models = None
+        self.analytics = None
+        self.explainability = None
+        self.models_loaded = False
+        
+        # Attempt reload
+        return self.load_all_models()
+    
+    def is_ready(self) -> bool:
+        """Check if models are loaded and ready"""
+        return self.models_loaded and self.models is not None
+    
+    def get_status(self) -> ModelStatus:
+        """Get current status of model loader"""
+        return ModelStatus(
+            models_loaded=self.models_loaded,
+            preprocessor_loaded=self.preprocessor is not None,
+            analytics_available=self.analytics is not None,
+            explainability_available=self.explainability is not None,
+            chatbot_available=self.chatbot is not None,
+            model_info={
+                "best_model": self.metadata.get('best_model') if self.metadata else None,
+                "trained_at": self.metadata.get('trained_at') if self.metadata else None,
+            } if self.metadata else None,
+            last_loaded=self.last_loaded,
+            error_message=self.load_error
+        )
 
 # Initialize model manager
+logger.info("Initializing Model Manager...")
 model_manager = ModelManager()
 
 # ============================================================================
@@ -262,33 +377,67 @@ model_manager = ModelManager()
 @app.get("/")
 async def root():
     """Root endpoint"""
+    status = model_manager.get_status()
     return {
         "message": "Real Estate Investment Advisor API",
         "version": "1.0.0",
         "status": "running",
+        "models_ready": status.models_loaded,
         "endpoints": {
             "prediction": "/predict",
             "investment": "/analyze",
             "explanation": "/explain",
             "chat": "/chat",
             "model_info": "/models/info",
-            "health": "/health"
+            "model_status": "/models/status",
+            "health": "/health",
+            "ready": "/ready",
+            "reload": "/admin/reload"
         }
     }
 
 @app.get("/health")
 async def health_check():
-    """Health check endpoint"""
+    """Health check endpoint - always returns healthy if API is running"""
+    status = model_manager.get_status()
     return {
         "status": "healthy",
-        "models_loaded": model_manager.models is not None,
-        "preprocessor_loaded": model_manager.preprocessor is not None,
-        "chatbot_available": model_manager.chatbot is not None
+        "timestamp": datetime.utcnow().isoformat(),
+        "models_status": status.dict()
     }
+
+@app.get("/ready")
+async def readiness_check():
+    """Readiness check - only ready when models are loaded"""
+    if not model_manager.is_ready():
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "status": "not_ready",
+                "message": "Models not loaded yet. Check /models/status for details.",
+                "error": model_manager.load_error
+            }
+        )
+    return {
+        "status": "ready",
+        "models_loaded": True,
+        "timestamp": datetime.utcnow().isoformat()
+    }
+
+@app.get("/models/status", response_model=ModelStatus)
+async def model_status():
+    """Get detailed model status"""
+    return model_manager.get_status()
 
 @app.get("/models/info")
 async def model_info():
     """Get model information and metrics"""
+    if not model_manager.metadata:
+        raise HTTPException(
+            status_code=503,
+            detail="Models not loaded. Upload models and call POST /admin/reload"
+        )
+    
     return {
         "best_model": model_manager.metadata['best_model'],
         "trained_at": model_manager.metadata['trained_at'],
@@ -297,9 +446,48 @@ async def model_info():
         "feature_names": model_manager.metadata.get('feature_names', [])
     }
 
+@app.post("/admin/reload")
+async def reload_models():
+    """Reload models from GCS (admin endpoint)"""
+    logger.info("Reload request received")
+    
+    try:
+        success = model_manager.reload_models()
+        
+        if success:
+            return {
+                "status": "success",
+                "message": "Models reloaded successfully",
+                "timestamp": datetime.utcnow().isoformat(),
+                "model_info": {
+                    "best_model": model_manager.metadata.get('best_model'),
+                    "trained_at": model_manager.metadata.get('trained_at')
+                }
+            }
+        else:
+            return {
+                "status": "partial_success",
+                "message": "Reload attempted but models not available",
+                "error": model_manager.load_error,
+                "timestamp": datetime.utcnow().isoformat()
+            }
+            
+    except Exception as e:
+        logger.error(f"Reload failed: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to reload models: {str(e)}"
+        )
+
 @app.post("/predict", response_model=PredictionResponse)
 async def predict_price(property_input: PropertyInput):
     """Predict property price"""
+    if not model_manager.is_ready():
+        raise HTTPException(
+            status_code=503,
+            detail="Models not available. Please wait or contact administrator."
+        )
+    
     try:
         # Convert input to DataFrame
         input_data = property_input.dict()
@@ -328,16 +516,22 @@ async def predict_price(property_input: PropertyInput):
             confidence_interval_lower=float(prediction - 1.96 * std_dev),
             confidence_interval_upper=float(prediction + 1.96 * std_dev),
             model_used=model_manager.metadata['best_model'],
-            prediction_date=pd.Timestamp.now().isoformat()
+            prediction_date=datetime.utcnow().isoformat()
         )
         
     except Exception as e:
-        logger.error(f"Prediction error: {e}")
+        logger.error(f"Prediction error: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/analyze", response_model=InvestmentAnalysisResponse)
 async def analyze_investment(investment_input: InvestmentInput):
     """Perform comprehensive investment analysis"""
+    if not model_manager.analytics:
+        raise HTTPException(
+            status_code=503,
+            detail="Analytics not available. Models may not be loaded."
+        )
+    
     try:
         # Prepare data
         analysis_data = investment_input.dict()
@@ -362,12 +556,18 @@ async def analyze_investment(investment_input: InvestmentInput):
         )
         
     except Exception as e:
-        logger.error(f"Analysis error: {e}")
+        logger.error(f"Analysis error: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/explain", response_model=ExplainabilityResponse)
 async def explain_prediction(property_input: PropertyInput):
     """Explain prediction using SHAP/LIME"""
+    if not model_manager.is_ready():
+        raise HTTPException(
+            status_code=503,
+            detail="Explainability not available. Models may not be loaded."
+        )
+    
     try:
         # Convert input to DataFrame and preprocess
         input_data = property_input.dict()
@@ -405,19 +605,19 @@ async def explain_prediction(property_input: PropertyInput):
         )
         
     except Exception as e:
-        logger.error(f"Explanation error: {e}")
+        logger.error(f"Explanation error: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/chat", response_model=ChatResponse)
 async def chat(chat_request: ChatRequest):
     """Chat with AI assistant"""
+    if not model_manager.chatbot:
+        raise HTTPException(
+            status_code=503, 
+            detail="Chatbot service not available. Groq API key not configured."
+        )
+    
     try:
-        if not model_manager.chatbot:
-            raise HTTPException(
-                status_code=503, 
-                detail="Chatbot service not available. Groq API key not configured."
-            )
-        
         # Set context if provided
         if chat_request.context:
             model_manager.chatbot.set_property_context(
@@ -434,7 +634,7 @@ async def chat(chat_request: ChatRequest):
         )
         
     except Exception as e:
-        logger.error(f"Chat error: {e}")
+        logger.error(f"Chat error: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/chat/reset")
@@ -455,9 +655,21 @@ async def reset_chat():
 @app.on_event("startup")
 async def startup_event():
     """Startup tasks"""
-    logger.info("API starting up...")
-    logger.info(f"Models loaded: {model_manager.models is not None}")
-    logger.info(f"Best model: {model_manager.metadata['best_model']}")
+    logger.info("=" * 60)
+    logger.info("🚀 Real Estate Investment Advisor API Starting...")
+    logger.info("=" * 60)
+    
+    # Attempt to load models
+    success = model_manager.load_all_models()
+    
+    if success:
+        logger.info("✅ API started successfully with models loaded")
+        logger.info(f"Best model: {model_manager.metadata['best_model']}")
+    else:
+        logger.warning("⚠️ API started but models are not available")
+        logger.warning("Upload models to GCS and call POST /admin/reload")
+    
+    logger.info("=" * 60)
 
 @app.on_event("shutdown")
 async def shutdown_event():

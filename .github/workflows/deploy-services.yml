@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: read
+  id-token: write
 
 env:
   PROJECT_ID: ${{ secrets.GCP_PROJECT }}
@@ -19,12 +20,15 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # ---------------------------------------------------------
+      # Checkout repository
+      # ---------------------------------------------------------
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      # ================================
-      # Authenticate using Service Account JSON key
-      # ================================
+      # ---------------------------------------------------------
+      # Authenticate using Service Account
+      # ---------------------------------------------------------
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
         with:
@@ -33,15 +37,22 @@ jobs:
       - name: Setup gcloud CLI
         uses: google-github-actions/setup-gcloud@v2
         with:
-          project_id: ${{ secrets.GCP_PROJECT }}
+          project_id: ${{ env.PROJECT_ID }}
 
-      # ================================
+      # ---------------------------------------------------------
+      # Configure Docker for Artifact Registry
+      # ---------------------------------------------------------
+      - name: Configure Docker for Artifact Registry
+        run: |
+          gcloud auth configure-docker "$(echo "${ARTIFACT_REGISTRY_REPO}" | cut -d'/' -f1)" -q
+
+      # ---------------------------------------------------------
       # Deploy Backend
-      # ================================
-      - name: Deploy backend to Cloud Run
+      # ---------------------------------------------------------
+      - name: Deploy Backend to Cloud Run
         run: |
           IMAGE="${ARTIFACT_REGISTRY_REPO}/realestate-backend:latest"
-          echo "Deploying backend: $IMAGE"
+          echo "🚀 Deploying backend: $IMAGE"
 
           gcloud run deploy realestate-backend \
             --image="$IMAGE" \
@@ -56,27 +67,34 @@ jobs:
             --set-env-vars="GCS_BUCKET_NAME=${PROJECT_ID}-ml-models,GCS_MODEL_PATH=models/latest,ENVIRONMENT=production" \
             --set-secrets="GROQ_API_KEY=groq-api-key:latest"
 
-      # ================================
-      # Fetch Backend URL
-      # ================================
+      # ---------------------------------------------------------
+      # Get Backend URL
+      # ---------------------------------------------------------
       - name: Get Backend URL
         id: backend_url
         run: |
           URL=$(gcloud run services describe realestate-backend \
             --region="$REGION" \
-            --format='value(status.url)')
-          echo "backend_url=$URL" >> $GITHUB_OUTPUT
+            --format="value(status.url)" 2>/dev/null || true)
 
-      # ================================
+          if [ -z "$URL" ]; then
+            echo "⚠ Backend URL not found. Using localhost fallback."
+            URL="http://localhost:8080"
+          fi
+
+          echo "backend_url=$URL" >> $GITHUB_OUTPUT
+          echo "Backend URL: $URL"
+
+      # ---------------------------------------------------------
       # Deploy Frontend
-      # ================================
-      - name: Deploy frontend to Cloud Run
+      # ---------------------------------------------------------
+      - name: Deploy Frontend to Cloud Run
         run: |
           IMAGE="${ARTIFACT_REGISTRY_REPO}/realestate-frontend:latest"
           BACKEND_URL="${{ steps.backend_url.outputs.backend_url }}"
 
-          echo "Deploying frontend: $IMAGE"
-          echo "Using BACKEND_API_URL: $BACKEND_URL"
+          echo "🚀 Deploying frontend: $IMAGE"
+          echo "🔗 Using BACKEND_API_URL: $BACKEND_URL"
 
           gcloud run deploy realestate-frontend \
             --image="$IMAGE" \

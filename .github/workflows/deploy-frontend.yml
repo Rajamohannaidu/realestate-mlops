@@ -1,9 +1,7 @@
 # ============================================================================
 # GITHUB ACTIONS - Auto Deploy Frontend on Push
 # ============================================================================
-# PURPOSE: Automatically deploy frontend when frontend/ files change
-# TRIGGER: Push to main branch with changes in frontend/ directory
-# DEPLOYS: Streamlit UI to Cloud Run
+# PURPOSE: Deploy Streamlit frontend to Cloud Run on every push to main.
 # ============================================================================
 
 name: Deploy Frontend (Streamlit)
@@ -13,104 +11,135 @@ on:
     branches:
       - main
     paths:
-      - 'frontend/**'
-      - '.github/workflows/deploy-frontend.yml'
-  workflow_dispatch:  # Allow manual trigger
+      - "frontend/**"
+      - ".github/workflows/deploy-frontend.yml"
+  workflow_dispatch:
 
 env:
   PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
   REGION: us-central1
   SERVICE_NAME: realestate-frontend
+  REPO: us-central1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/realestate-repo
 
 jobs:
   deploy-frontend:
-    name: Build and Deploy Frontend
     runs-on: ubuntu-latest
-    
+
     permissions:
       contents: read
       id-token: write
-    
+
     steps:
-      # Step 1: Checkout code
-      - name: Checkout Code
-        uses: actions/checkout@v3
-      
-      # Step 2: Authenticate to GCP
+      # ---------------------------------------------------------------
+      # Step 1: Checkout Code
+      # ---------------------------------------------------------------
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ---------------------------------------------------------------
+      # Step 2: Authenticate to Google Cloud
+      # ---------------------------------------------------------------
       - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v1
+        uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
-      
-      # Step 3: Setup Cloud SDK
-      - name: Set up Cloud SDK
-        uses: google-github-actions/setup-gcloud@v1
+
+      # ---------------------------------------------------------------
+      # Step 3: Setup gcloud CLI
+      # ---------------------------------------------------------------
+      - name: Setup gcloud SDK
+        uses: google-github-actions/setup-gcloud@v2
         with:
           project_id: ${{ env.PROJECT_ID }}
-      
-      # Step 4: Configure Docker for GCR
-      - name: Configure Docker for GCR
+
+      # ---------------------------------------------------------------
+      # Step 4: Configure Docker to push to Artifact Registry
+      # ---------------------------------------------------------------
+      - name: Configure Docker for Artifact Registry
         run: |
-          gcloud auth configure-docker
-      
-      # Step 5: Get Backend URL
+          gcloud auth configure-docker us-central1-docker.pkg.dev -q
+
+      # ---------------------------------------------------------------
+      # Step 5: Get Backend URL (fallback to local for dev)
+      # ---------------------------------------------------------------
       - name: Get Backend URL
         id: backend-url
         run: |
-          BACKEND_URL=$(gcloud run services describe realestate-backend \
+          BACKEND=$(gcloud run services describe realestate-backend \
             --region=${{ env.REGION }} \
-            --format='value(status.url)' || echo "http://localhost:8080")
-          echo "url=$BACKEND_URL" >> $GITHUB_OUTPUT
-      
+            --format='value(status.url)' 2>/dev/null || true)
+
+          if [ -z "$BACKEND" ]; then
+            echo "⚠ Backend not found. Using default local URL."
+            BACKEND="http://localhost:8080"
+          fi
+
+          echo "url=$BACKEND" >> $GITHUB_OUTPUT
+
+      # ---------------------------------------------------------------
       # Step 6: Build Docker Image
+      # ---------------------------------------------------------------
       - name: Build Frontend Docker Image
         run: |
-          cd frontend
-          docker build -f Dockerfile.frontend \
-            -t gcr.io/${{ env.PROJECT_ID }}/${{ env.SERVICE_NAME }}:${{ github.sha }} \
-            -t gcr.io/${{ env.PROJECT_ID }}/${{ env.SERVICE_NAME }}:latest \
-            .
-      
-      # Step 7: Push to GCR
-      - name: Push to Container Registry
+          docker build \
+            -f frontend/Dockerfile.frontend \
+            -t $REPO/${{ env.SERVICE_NAME }}:${{ github.sha }} \
+            -t $REPO/${{ env.SERVICE_NAME }}:latest \
+            frontend
+
+      # ---------------------------------------------------------------
+      # Step 7: Push to Artifact Registry
+      # ---------------------------------------------------------------
+      - name: Push Frontend Image
         run: |
-          docker push gcr.io/${{ env.PROJECT_ID }}/${{ env.SERVICE_NAME }}:${{ github.sha }}
-          docker push gcr.io/${{ env.PROJECT_ID }}/${{ env.SERVICE_NAME }}:latest
-      
+          docker push $REPO/${{ env.SERVICE_NAME }}:${{ github.sha }}
+          docker push $REPO/${{ env.SERVICE_NAME }}:latest
+
+      # ---------------------------------------------------------------
       # Step 8: Deploy to Cloud Run
+      # ---------------------------------------------------------------
       - name: Deploy to Cloud Run
         run: |
           gcloud run deploy ${{ env.SERVICE_NAME }} \
-            --image=gcr.io/${{ env.PROJECT_ID }}/${{ env.SERVICE_NAME }}:${{ github.sha }} \
+            --image=$REPO/${{ env.SERVICE_NAME }}:${{ github.sha }} \
             --platform=managed \
             --region=${{ env.REGION }} \
             --allow-unauthenticated \
             --memory=2Gi \
             --cpu=2 \
-            --max-instances=10 \
+            --timeout=300 \
             --min-instances=1 \
+            --max-instances=10 \
             --set-env-vars="BACKEND_API_URL=${{ steps.backend-url.outputs.url }}"
-      
-      # Step 9: Get Service URL
-      - name: Get Service URL
+
+      # ---------------------------------------------------------------
+      # Step 9: Retrieve Deployed URL
+      # ---------------------------------------------------------------
+      - name: Get Frontend URL
         id: service-url
         run: |
-          SERVICE_URL=$(gcloud run services describe ${{ env.SERVICE_NAME }} \
+          URL=$(gcloud run services describe ${{ env.SERVICE_NAME }} \
             --region=${{ env.REGION }} \
             --format='value(status.url)')
-          echo "url=$SERVICE_URL" >> $GITHUB_OUTPUT
-      
-      # Step 10: Test Deployment
-      - name: Test Frontend
+          echo "url=$URL" >> $GITHUB_OUTPUT
+
+      # ---------------------------------------------------------------
+      # Step 10: Test Deployed Service
+      # ---------------------------------------------------------------
+      - name: Validate Deployment
         run: |
+          echo "Waiting for service to warm up..."
           sleep 10
           curl -f ${{ steps.service-url.outputs.url }} || exit 1
-          echo "Frontend is live at: ${{ steps.service-url.outputs.url }}"
-      
+
+      # ---------------------------------------------------------------
       # Step 11: Deployment Summary
+      # ---------------------------------------------------------------
       - name: Deployment Summary
         run: |
-          echo "✅ Frontend Deployment Complete!"
+          echo "==============================================="
+          echo "🎉 Frontend Deployment Complete!"
           echo "🌐 URL: ${{ steps.service-url.outputs.url }}"
-          echo "📦 Image: gcr.io/${{ env.PROJECT_ID }}/${{ env.SERVICE_NAME }}:${{ github.sha }}"
-          echo "🔗 Backend: ${{ steps.backend-url.outputs.url }}"
+          echo "📦 Image: $REPO/${{ env.SERVICE_NAME }}:${{ github.sha }}"
+          echo "🔗 Backend API: ${{ steps.backend-url.outputs.url }}"
+          echo "==============================================="

@@ -1,9 +1,5 @@
 # ============================================================================
-# BACKEND CLOUD BUILD CONFIGURATION - CI/CD for FastAPI
-# ============================================================================
-# PURPOSE: Automatically build and deploy backend ML API when code changes
-# TRIGGER: Runs when backend/ directory files change
-# DEPLOYS TO: Cloud Run (realestate-backend service)
+# BACKEND CLOUD BUILD CONFIGURATION - FastAPI ML Service
 # ============================================================================
 
 steps:
@@ -14,26 +10,26 @@ steps:
       - '-f'
       - 'backend/Dockerfile.backend'
       - '-t'
-      - 'gcr.io/$PROJECT_ID/realestate-backend:$SHORT_SHA'
+      - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_ARTIFACT_REPO}/realestate-backend:$SHORT_SHA'
       - '-t'
-      - 'gcr.io/$PROJECT_ID/realestate-backend:latest'
+      - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_ARTIFACT_REPO}/realestate-backend:latest'
       - './backend'
     id: 'build-backend-image'
-    
-  # Step 2: Push Image to Container Registry
+
+  # Step 2: Push SHA Tag
   - name: 'gcr.io/cloud-builders/docker'
     args:
       - 'push'
-      - 'gcr.io/$PROJECT_ID/realestate-backend:$SHORT_SHA'
-    id: 'push-backend-image'
-    
+      - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_ARTIFACT_REPO}/realestate-backend:$SHORT_SHA'
+    id: 'push-sha'
+
   # Step 3: Push Latest Tag
   - name: 'gcr.io/cloud-builders/docker'
     args:
       - 'push'
-      - 'gcr.io/$PROJECT_ID/realestate-backend:latest'
-    id: 'push-backend-latest'
-    
+      - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_ARTIFACT_REPO}/realestate-backend:latest'
+    id: 'push-latest'
+
   # Step 4: Deploy to Cloud Run
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     entrypoint: 'gcloud'
@@ -42,7 +38,7 @@ steps:
       - 'deploy'
       - 'realestate-backend'
       - '--image'
-      - 'gcr.io/$PROJECT_ID/realestate-backend:$SHORT_SHA'
+      - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_ARTIFACT_REPO}/realestate-backend:$SHORT_SHA'
       - '--region'
       - '${_REGION}'
       - '--platform'
@@ -54,17 +50,17 @@ steps:
       - '2'
       - '--timeout'
       - '300'
-      - '--max-instances'
-      - '20'
       - '--min-instances'
       - '2'
+      - '--max-instances'
+      - '20'
       - '--set-env-vars'
       - 'GCS_BUCKET_NAME=${_GCS_BUCKET_NAME},GCS_MODEL_PATH=${_GCS_MODEL_PATH},ENVIRONMENT=${_ENVIRONMENT}'
       - '--set-secrets'
       - 'GROQ_API_KEY=groq-api-key:latest'
-    id: 'deploy-backend-cloud-run'
-    
-  # Step 5: Update Frontend with New Backend URL (if needed)
+    id: 'deploy-backend'
+
+  # Step 5: Update Frontend service with backend URL
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     entrypoint: 'bash'
     args:
@@ -73,29 +69,37 @@ steps:
         BACKEND_URL=$(gcloud run services describe realestate-backend \
           --region=${_REGION} \
           --format='value(status.url)')
-        
+
+        echo "Backend URL: $BACKEND_URL"
+
         gcloud run services update realestate-frontend \
           --region=${_REGION} \
           --update-env-vars="BACKEND_API_URL=$${BACKEND_URL}" \
           --quiet || echo "Frontend not deployed yet"
-    id: 'update-frontend-backend-url'
+    id: 'update-frontend-env'
 
-# Configuration options
+# ============================================================================
+# OPTIONS
+# ============================================================================
 options:
   logging: CLOUD_LOGGING_ONLY
   machineType: 'N1_HIGHCPU_8'
 
-# Images to push to registry
+# ============================================================================
+# IMAGES
+# ============================================================================
 images:
-  - 'gcr.io/$PROJECT_ID/realestate-backend:$SHORT_SHA'
-  - 'gcr.io/$PROJECT_ID/realestate-backend:latest'
+  - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_ARTIFACT_REPO}/realestate-backend:$SHORT_SHA'
+  - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_ARTIFACT_REPO}/realestate-backend:latest'
 
-# Substitution variables
+# ============================================================================
+# SUBSTITUTION VARIABLES
+# ============================================================================
 substitutions:
   _REGION: 'us-central1'
+  _ARTIFACT_REPO: 'realestate-repo'
   _GCS_BUCKET_NAME: '${PROJECT_ID}-ml-models'
   _GCS_MODEL_PATH: 'models/latest'
   _ENVIRONMENT: 'production'
 
-# Timeout for entire build
-timeout: '2400s'  # 40 minutes (ML dependencies take time)
+timeout: '2400s'

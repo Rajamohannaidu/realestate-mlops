@@ -1,9 +1,9 @@
 # ============================================================================
 # DOCKER COMPOSE - Local Development Environment
 # ============================================================================
-# PURPOSE: Run both frontend and backend locally with Docker
+# PURPOSE: Run backend (FastAPI) + frontend (Streamlit) locally
 # USAGE: docker-compose up
-# BENEFITS: Matches production environment exactly
+# NOTES: Mirrors Cloud Run setup for consistent development experience
 # ============================================================================
 
 version: '3.8'
@@ -20,16 +20,16 @@ services:
     ports:
       - "8080:8080"
     environment:
-      - PYTHONUNBUFFERED=1
-      - GCS_BUCKET_NAME=${GCS_BUCKET_NAME}
-      - GCS_MODEL_PATH=${GCS_MODEL_PATH:-models/latest}
-      - GROQ_API_KEY=${GROQ_API_KEY}
-      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      PYTHONUNBUFFERED: "1"
+      GCS_BUCKET_NAME: "${GCS_BUCKET_NAME:-local-models}"
+      GCS_MODEL_PATH: "${GCS_MODEL_PATH:-models/latest}"
+      GROQ_API_KEY: "${GROQ_API_KEY:-dummy}"
+      LOG_LEVEL: "${LOG_LEVEL:-INFO}"
     volumes:
-      # Mount local models directory (for development)
-      - ./backend/models:/app/models
-      # Mount source code for hot-reload (development only)
+      # Local development: hot reload & live code updates
       - ./backend/src:/app/src
+      # Local models for running without GCS
+      - ./backend/models:/app/models
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
       interval: 30s
@@ -51,11 +51,11 @@ services:
     ports:
       - "8501:8501"
     environment:
-      - PYTHONUNBUFFERED=1
-      - BACKEND_API_URL=http://backend:8080
-      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      PYTHONUNBUFFERED: "1"
+      BACKEND_API_URL: "http://backend:8080"
+      LOG_LEVEL: "${LOG_LEVEL:-INFO}"
     volumes:
-      # Mount app directory for hot-reload (development only)
+      # Hot reload for Streamlit
       - ./frontend/app:/app/app
     depends_on:
       - backend
@@ -76,28 +76,32 @@ networks:
   realestate-network:
     driver: bridge
 
-# ===========================
-# USAGE INSTRUCTIONS
-# ===========================
-# 
-# Start services:
-#   docker-compose up
-# 
+# ============================================================================
+# HOW TO USE
+# ============================================================================
+
+# Start everything:
+#     docker-compose up
+#
 # Start in background:
-#   docker-compose up -d
-# 
+#     docker-compose up -d
+#
+# Restart:
+#     docker-compose restart
+#
 # View logs:
-#   docker-compose logs -f
-# 
-# Stop services:
-#   docker-compose down
-# 
-# Rebuild images:
-#   docker-compose build
-# 
-# Access services:
-#   Frontend: http://localhost:8501
-#   Backend:  http://localhost:8080
-#   API Docs: http://localhost:8080/docs
-# 
-# ===========================
+#     docker-compose logs -f
+#
+# Rebuild only backend:
+#     docker-compose build backend
+#
+# Rebuild everything:
+#     docker-compose build --no-cache
+#
+# Stop:
+#     docker-compose down
+#
+# App URLs:
+#     Frontend: http://localhost:8501
+#     Backend:  http://localhost:8080
+#     Docs:     http://localhost:8080/docs
