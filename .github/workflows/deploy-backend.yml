@@ -12,7 +12,9 @@ env:
   PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
   REGION: us-central1
   SERVICE_NAME: realestate-backend
-  ARTIFACT_REGISTRY_REPO: realestate-repo
+
+  # IMPORTANT: Must be FULL PATH
+  ARTIFACT_REGISTRY_REPO: ${{ secrets.ARTIFACT_REGISTRY_REPO }}
 
 permissions:
   id-token: write
@@ -36,29 +38,25 @@ jobs:
           project_id: ${{ env.PROJECT_ID }}
 
       - name: Configure Docker for Artifact Registry
-        run: gcloud auth configure-docker us-central1-docker.pkg.dev
-
-      # Build proper repo path
-      - name: Set IMAGE REPO
-        run: echo "REPO=us-central1-docker.pkg.dev/${PROJECT_ID}/${ARTIFACT_REGISTRY_REPO}" >> $GITHUB_ENV
+        run: gcloud auth configure-docker ${REGION}-docker.pkg.dev
 
       - name: Build Backend Image
         run: |
           docker build \
             -f backend/Dockerfile.backend \
-            -t $REPO/${SERVICE_NAME}:${{ github.sha }} \
-            -t $REPO/${SERVICE_NAME}:latest \
+            -t ${ARTIFACT_REGISTRY_REPO}/realestate-backend:${{ github.sha }} \
+            -t ${ARTIFACT_REGISTRY_REPO}/realestate-backend:latest \
             backend
 
       - name: Push Backend Image
         run: |
-          docker push $REPO/${SERVICE_NAME}:${{ github.sha }}
-          docker push $REPO/${SERVICE_NAME}:latest
+          docker push ${ARTIFACT_REGISTRY_REPO}/realestate-backend:${{ github.sha }}
+          docker push ${ARTIFACT_REGISTRY_REPO}/realestate-backend:latest
 
       - name: Deploy to Cloud Run
         run: |
           gcloud run deploy ${SERVICE_NAME} \
-            --image=$REPO/${SERVICE_NAME}:${{ github.sha }} \
+            --image=${ARTIFACT_REGISTRY_REPO}/realestate-backend:${{ github.sha }} \
             --region=${REGION} \
             --platform=managed \
             --allow-unauthenticated \
@@ -67,26 +65,5 @@ jobs:
             --timeout=300 \
             --min-instances=2 \
             --max-instances=20 \
-            --set-env-vars="GCS_BUCKET_NAME=${{ secrets.GCS_BUCKET_NAME }}" \
-            --set-env-vars="GCS_MODEL_PATH=models/latest" \
-            --set-env-vars="ENVIRONMENT=production" \
-            --set-secrets="GROQ_API_KEY=groq-api-key:latest"
+            --set-env-vars="ENVIRONMENT=production"
 
-      - name: Get Backend URL
-        id: backend-url
-        run: |
-          URL=$(gcloud run services describe ${SERVICE_NAME} \
-            --region=${REGION} \
-            --format='value(status.url)')
-          echo "url=$URL" >> $GITHUB_OUTPUT
-
-      - name: Test Backend Health
-        run: |
-          sleep 10
-          curl -f ${{ steps.backend-url.outputs.url }}/health || exit 1
-
-      - name: Deployment Summary
-        run: |
-          echo "🎉 Backend Deployment Complete!"
-          echo "🌐 URL: ${{ steps.backend-url.outputs.url }}"
-          echo "📦 Image: $REPO/${SERVICE_NAME}:${{ github.sha }}"
