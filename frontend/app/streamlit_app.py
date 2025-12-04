@@ -1,8 +1,14 @@
 # app/streamlit_app.py - Enhanced Modern Design
 
 from dotenv import load_dotenv
+from pathlib import Path
+import os
+import sys
+from datetime import datetime
 
-load_dotenv()
+# Load .env from project root (3 levels up: app -> frontend -> project_root)
+env_path = Path(__file__).resolve().parent.parent.parent / '.env'
+load_dotenv(dotenv_path=env_path)
 
 import streamlit as st
 import pandas as pd
@@ -10,16 +16,29 @@ import numpy as np
 import plotly.graph_objects as go
 import plotly.express as px
 from plotly.subplots import make_subplots
-import sys
-import os
-from datetime import datetime
+
+# CRITICAL: Page config must be the FIRST Streamlit command
+st.set_page_config(
+    page_title="AI Real Estate Advisor",
+    page_icon="🏠",
+    layout="wide",
+    initial_sidebar_state="expanded",
+    menu_items={
+        'Get Help': 'https://github.com/yourusername/real-estate-ai',
+        'Report a bug': "https://github.com/yourusername/real-estate-ai/issues",
+        'About': "# AI Real Estate Investment Advisor\nPowered by Machine Learning & AI"
+    }
+)
+
+# Now do debug prints (after st.set_page_config)
+if os.getenv('GROQ_API_KEY'):
+    print("✓ GROQ_API_KEY successfully loaded")
+else:
+    print(f"✗ .env file path: {env_path}")
+    print(f"✗ .env exists: {env_path.exists()}")
+    print("✗ GROQ_API_KEY not found - AI Assistant will not be available")
 
 # Add backend/src to path
-import sys
-import os
-from pathlib import Path
-
-# Get absolute paths
 current_file = Path(__file__).resolve()  # frontend/app/streamlit_app.py
 app_dir = current_file.parent            # frontend/app/
 frontend_dir = app_dir.parent            # frontend/
@@ -36,29 +55,19 @@ if not backend_src.exists():
 
 print(f"✓ Loading modules from: {backend_src}")
 
-from training.chatbot import RealEstateInvestmentChatbot
+# Import modules from backend/src/training
 from training.data_preprocessing import RealEstateDataPreprocessor
 from training.predictive_models import RealEstatePredictiveModels
 from training.investment_analytics import InvestmentAnalytics
 from training.explainability import ModelExplainability
 
+# Try to import chatbot (requires GROQ_API_KEY)
 try:
-    from src.chatbot import RealEstateInvestmentChatbot
-except:
+    from training.chatbot import RealEstateInvestmentChatbot
+    print("✓ Chatbot module imported successfully")
+except Exception as e:
+    print(f"✗ Chatbot import failed: {e}")
     RealEstateInvestmentChatbot = None
-
-# Page configuration
-st.set_page_config(
-    page_title="AI Real Estate Advisor",
-    page_icon="🏠",
-    layout="wide",
-    initial_sidebar_state="expanded",
-    menu_items={
-        'Get Help': 'https://github.com/yourusername/real-estate-ai',
-        'Report a bug': "https://github.com/yourusername/real-estate-ai/issues",
-        'About': "# AI Real Estate Investment Advisor\nPowered by Machine Learning & AI"
-    }
-)
 
 # Custom CSS for modern design
 st.markdown("""
