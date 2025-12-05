@@ -12,8 +12,6 @@ env:
   PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
   REGION: us-central1
   SERVICE_NAME: realestate-backend
-
-  # IMPORTANT: Must be FULL PATH
   ARTIFACT_REGISTRY_REPO: ${{ secrets.ARTIFACT_REGISTRY_REPO }}
 
 permissions:
@@ -25,7 +23,8 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
@@ -38,7 +37,8 @@ jobs:
           project_id: ${{ env.PROJECT_ID }}
 
       - name: Configure Docker for Artifact Registry
-        run: gcloud auth configure-docker ${REGION}-docker.pkg.dev
+        run: |
+          gcloud auth configure-docker ${REGION}-docker.pkg.dev
 
       - name: Build Backend Image
         run: |
@@ -48,7 +48,7 @@ jobs:
             -t ${ARTIFACT_REGISTRY_REPO}/realestate-backend:latest \
             backend
 
-      - name: Push Backend Image
+      - name: Push Backend Image to Artifact Registry
         run: |
           docker push ${ARTIFACT_REGISTRY_REPO}/realestate-backend:${{ github.sha }}
           docker push ${ARTIFACT_REGISTRY_REPO}/realestate-backend:latest
@@ -63,13 +63,37 @@ jobs:
             --memory=4Gi \
             --cpu=2 \
             --timeout=300 \
-            --min-instances=2 \
+            --min-instances=1 \
             --max-instances=20 \
             --set-env-vars="GCS_BUCKET_NAME=${PROJECT_ID}-ml-models,GCS_MODEL_PATH=models/latest,ENVIRONMENT=production,ALLOW_STARTUP_WITHOUT_MODELS=false" \
             --set-secrets="GROQ_API_KEY=groq-api-key:latest" \
             --cpu-throttling \
             --startup-cpu-boost \
             --health-check-path=/ready \
-            --health-check-interval=30s \
-            --health-check-timeout=10s \
-            --health-check-unhealthy-threshold=5
+            --health-check-interval=30 \
+            --health-check-timeout=10 \
+            --health-check-unhealthy-threshold=5 \
+            --no-gen2
+
+      - name: Verify Deployment
+        run: |
+          echo "Waiting for service to be ready..."
+          sleep 5
+          SERVICE_URL=$(gcloud run services describe ${SERVICE_NAME} --region=${REGION} --format='value(status.url)')
+          echo "Service URL: $SERVICE_URL"
+          
+          # Test health endpoint
+          echo "Testing /health endpoint..."
+          curl -s -o /dev/null -w "%{http_code}" ${SERVICE_URL}/health
+          echo ""
+          
+          # Test ready endpoint (may be 503 during startup)
+          echo "Testing /ready endpoint..."
+          curl -s -o /dev/null -w "%{http_code}" ${SERVICE_URL}/ready
+          echo ""
+
+      - name: Show Deployment Logs
+        if: failure()
+        run: |
+          echo "=== Recent Cloud Run Logs ==="
+          gcloud run logs read ${SERVICE_NAME} --region=${REGION} --limit=50 --format=json | jq -r '.[] | "\(.timestamp): \(.textPayload)"'

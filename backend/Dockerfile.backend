@@ -27,10 +27,7 @@ RUN pip install --no-cache-dir -r requirements.backend.txt
 # Copy application code
 COPY src ./src
 
-# Copy pre-trained models (if they exist locally)
-COPY models/saved_models ./models/saved_models 2>/dev/null || true
-
-# Create directory for models (Cloud Run will mount GCS, so keep path predictable)
+# Create directory for models (will be populated from GCS at runtime)
 RUN mkdir -p /app/models/saved_models
 
 # Environment variables
