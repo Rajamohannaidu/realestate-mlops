@@ -203,20 +203,21 @@ class ModelManager:
 
         self.allow_startup_without_models = os.getenv(
             'ALLOW_STARTUP_WITHOUT_MODELS', 
-            'true'
+            'false'
         ).lower() == 'true'
 
         self.bucket_name = os.getenv('GCS_BUCKET_NAME')
         self.gcs_model_path = os.getenv('GCS_MODEL_PATH', 'models/latest')
-        self.local_model_path = os.getenv('LOCAL_MODEL_PATH', 'models/saved_models')
+        self.local_model_path = os.getenv('LOCAL_MODEL_PATH', '/app/models/saved_models')
 
     def download_from_gcs(self) -> bool:
+        """Download models from GCS bucket"""
         try:
             if not self.bucket_name:
                 logger.warning("GCS_BUCKET_NAME not set, skipping GCS download")
                 return False
 
-            logger.info(f"Downloading models from gs://{self.bucket_name}/{self.gcs_model_path}")
+            logger.info(f"📥 Downloading models from gs://{self.bucket_name}/{self.gcs_model_path}")
             storage_client = storage.Client()
             bucket = storage_client.bucket(self.bucket_name)
 
@@ -225,74 +226,136 @@ class ModelManager:
             blobs = list(bucket.list_blobs(prefix=self.gcs_model_path))
 
             if not blobs:
-                logger.warning("No model files found")
+                logger.warning(f"❌ No model files found in gs://{self.bucket_name}/{self.gcs_model_path}")
                 return False
 
+            downloaded_count = 0
             for blob in blobs:
                 if not blob.name.endswith('/'):
                     local_file = os.path.join(self.local_model_path, os.path.basename(blob.name))
                     blob.download_to_filename(local_file)
-                    logger.info(f"Downloaded: {blob.name}")
+                    logger.info(f"✅ Downloaded: {blob.name} → {local_file}")
+                    downloaded_count += 1
 
-            return True
+            logger.info(f"📦 Downloaded {downloaded_count} files from GCS")
+            return downloaded_count > 0
 
         except Exception as e:
-            logger.error(f"Error downloading from GCS: {e}", exc_info=True)
+            logger.error(f"❌ Error downloading from GCS: {e}", exc_info=True)
             return False
 
     def load_all_models(self) -> bool:
+        """Load all models and components"""
         try:
-            logger.info("Loading models...")
+            logger.info("=" * 60)
+            logger.info("🚀 STARTING MODEL LOADING SEQUENCE")
+            logger.info("=" * 60)
 
+            # Step 1: Try to download from GCS if bucket is configured
             if self.bucket_name:
+                logger.info(f"Step 1: Attempting GCS download from bucket '{self.bucket_name}'")
                 self.download_from_gcs()
+            else:
+                logger.warning("Step 1: Skipped (GCS_BUCKET_NAME not configured)")
 
+            # Step 2: Check if local models exist
+            logger.info(f"Step 2: Checking local model path: {self.local_model_path}")
             if not os.path.exists(self.local_model_path):
-                raise FileNotFoundError(f"Model path not found: {self.local_model_path}")
+                logger.error(f"❌ Model path does not exist: {self.local_model_path}")
+                if not self.allow_startup_without_models:
+                    raise FileNotFoundError(f"Model path not found: {self.local_model_path}")
+                return False
 
-            required = ["preprocessor.pkl", "metadata.json"]
-            for f in required:
-                if not os.path.exists(os.path.join(self.local_model_path, f)):
-                    raise FileNotFoundError(f"Missing required file: {f}")
+            # Step 3: List available files
+            available_files = os.listdir(self.local_model_path)
+            logger.info(f"📂 Available files in {self.local_model_path}: {available_files}")
 
-            self.preprocessor = joblib.load(
-                os.path.join(self.local_model_path, "preprocessor.pkl")
-            )
+            # Step 4: Check for required files
+            logger.info("Step 3: Checking for required files")
+            required_files = ["preprocessor.pkl", "metadata.json"]
+            missing_files = []
+            for f in required_files:
+                path = os.path.join(self.local_model_path, f)
+                if not os.path.exists(path):
+                    missing_files.append(f)
+                    logger.warning(f"⚠️  Missing: {f}")
+                else:
+                    logger.info(f"✅ Found: {f}")
 
+            if missing_files:
+                logger.error(f"❌ Missing required files: {missing_files}")
+                if not self.allow_startup_without_models:
+                    raise FileNotFoundError(f"Missing required files: {missing_files}")
+                return False
+
+            # Step 5: Load preprocessor
+            logger.info("Step 4: Loading preprocessor...")
+            preprocessor_path = os.path.join(self.local_model_path, "preprocessor.pkl")
+            self.preprocessor = joblib.load(preprocessor_path)
+            logger.info(f"✅ Preprocessor loaded: {preprocessor_path}")
+
+            # Step 6: Load predictive models
+            logger.info("Step 5: Loading predictive models...")
             self.models = RealEstatePredictiveModels()
             self.models.load_models(self.local_model_path)
+            logger.info(f"✅ Models loaded: {self.models.best_model_name}")
 
-            with open(os.path.join(self.local_model_path, "metadata.json"), "r") as f:
+            # Step 7: Load metadata
+            logger.info("Step 6: Loading metadata...")
+            metadata_path = os.path.join(self.local_model_path, "metadata.json")
+            with open(metadata_path, "r") as f:
                 self.metadata = json.load(f)
+            logger.info(f"✅ Metadata loaded: {self.metadata.get('best_model', 'unknown')}")
 
+            # Step 8: Initialize analytics
+            logger.info("Step 7: Initializing analytics...")
             self.analytics = InvestmentAnalytics()
+            logger.info("✅ Analytics initialized")
 
+            # Step 9: Initialize explainability
+            logger.info("Step 8: Initializing explainability...")
             self.explainability = ModelExplainability(
                 model=self.models.models[self.models.best_model_name],
                 preprocessor=self.preprocessor
             )
+            logger.info("✅ Explainability initialized")
 
+            # Step 10: Initialize chatbot (optional)
+            logger.info("Step 9: Initializing chatbot...")
             groq_api_key = os.getenv("GROQ_API_KEY")
             if groq_api_key:
                 self.chatbot = RealEstateInvestmentChatbot(api_key=groq_api_key)
+                logger.info("✅ Chatbot initialized")
+            else:
+                logger.warning("⚠️  GROQ_API_KEY not set, chatbot will be unavailable")
 
+            # Mark as ready
             self.models_loaded = True
             self.last_loaded = datetime.utcnow().isoformat()
             self.load_error = None
 
+            logger.info("=" * 60)
+            logger.info("✅ ALL MODELS LOADED SUCCESSFULLY!")
+            logger.info("=" * 60)
             return True
 
         except Exception as e:
-            logger.error(f"Error loading models: {e}", exc_info=True)
+            logger.error("=" * 60)
+            logger.error(f"❌ ERROR DURING MODEL LOADING: {e}", exc_info=True)
+            logger.error("=" * 60)
             self.load_error = str(e)
+            self.models_loaded = False
 
             if self.allow_startup_without_models:
-                logger.warning("Continuing without models")
+                logger.warning("⚠️  ALLOW_STARTUP_WITHOUT_MODELS=true, continuing without models")
                 return False
             else:
+                logger.error("🚨 ALLOW_STARTUP_WITHOUT_MODELS=false, aborting startup")
                 raise
 
     def reload_models(self):
+        """Reload all models"""
+        logger.info("🔄 Reloading models...")
         self.preprocessor = None
         self.models = None
         self.metadata = None
@@ -303,9 +366,11 @@ class ModelManager:
         return self.load_all_models()
 
     def is_ready(self):
+        """Check if models are ready"""
         return self.models_loaded
 
     def get_status(self):
+        """Get current model status"""
         return ModelStatus(
             models_loaded=self.models_loaded,
             preprocessor_loaded=self.preprocessor is not None,
@@ -318,7 +383,7 @@ class ModelManager:
         )
 
 
-logger.info("Initializing Model Manager...")
+logger.info("🔧 Initializing Model Manager...")
 model_manager = ModelManager()
 
 
@@ -338,26 +403,30 @@ async def root():
 
 @app.get("/health")
 async def health_check():
+    """Liveness probe - app is running"""
     return {"status": "healthy", "timestamp": datetime.utcnow().isoformat()}
 
 
 @app.get("/ready")
 async def readiness_check():
+    """Readiness probe - models are loaded and ready"""
     if not model_manager.is_ready():
         raise HTTPException(
             status_code=503,
-            detail="Models not loaded"
+            detail=f"Models not loaded: {model_manager.load_error}"
         )
     return {"status": "ready"}
 
 
 @app.get("/models/status", response_model=ModelStatus)
 async def model_status():
+    """Get detailed model loading status"""
     return model_manager.get_status()
 
 
 @app.post("/admin/reload")
 async def reload():
+    """Manually reload all models"""
     ok = model_manager.reload_models()
     return {"success": ok, "error": model_manager.load_error}
 
@@ -488,17 +557,21 @@ async def reset_chat():
 
 @app.on_event("startup")
 async def startup_event():
-    logger.info("🚀 Starting API...")
-    ok = model_manager.load_all_models()
-    if ok:
-        logger.info("Models loaded")
-    else:
-        logger.warning("API started without models")
+    logger.info("🚀 Starting Real Estate Investment Advisor API...")
+    try:
+        ok = model_manager.load_all_models()
+        if ok:
+            logger.info("✅ API ready with models loaded")
+        else:
+            logger.warning("⚠️  API started without models")
+    except Exception as e:
+        logger.error(f"❌ Startup failed: {e}", exc_info=True)
+        raise
 
 
 @app.on_event("shutdown")
 async def shutdown_event():
-    logger.info("API shutting down...")
+    logger.info("🛑 API shutting down...")
 
 
 if __name__ == "__main__":

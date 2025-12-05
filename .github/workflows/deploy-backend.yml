@@ -65,6 +65,11 @@ jobs:
             --timeout=300 \
             --min-instances=2 \
             --max-instances=20 \
-            --set-env-vars="GCS_BUCKET_NAME=${PROJECT_ID}-ml-models,GCS_MODEL_PATH=models/latest,ENVIRONMENT=production" \
-            --set-secrets="GROQ_API_KEY=groq-api-key:latest"
-
+            --set-env-vars="GCS_BUCKET_NAME=${PROJECT_ID}-ml-models,GCS_MODEL_PATH=models/latest,ENVIRONMENT=production,ALLOW_STARTUP_WITHOUT_MODELS=false" \
+            --set-secrets="GROQ_API_KEY=groq-api-key:latest" \
+            --cpu-throttling \
+            --startup-cpu-boost \
+            --health-check-path=/ready \
+            --health-check-interval=30s \
+            --health-check-timeout=10s \
+            --health-check-unhealthy-threshold=5
