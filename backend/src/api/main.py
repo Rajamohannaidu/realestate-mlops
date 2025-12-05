@@ -403,7 +403,8 @@ async def root():
 
 @app.get("/health")
 async def health_check():
-    """Liveness probe - app is running"""
+    """Liveness probe - app is running (doesn't wait for models)"""
+    logger.debug("Health check called")
     return {"status": "healthy", "timestamp": datetime.utcnow().isoformat()}
 
 

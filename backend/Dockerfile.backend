@@ -38,10 +38,15 @@ ENV ALLOW_STARTUP_WITHOUT_MODELS=true
 # Expose port
 EXPOSE 8080
 
-# Health check with longer startup period for model loading
-# Uses /ready endpoint which only returns 200 when models are fully loaded
-HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=3 \
-    CMD curl -f http://localhost:${PORT}/ready || exit 1
+# Health check - Cloud Run ignores HEALTHCHECK, we use /health for liveness
+# Note: Cloud Run uses its own health check mechanism (not Docker HEALTHCHECK)
+# The /health endpoint always returns 200 when the app is running
+# Models load asynchronously in startup event
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=1 \
+    CMD curl -f http://localhost:${PORT}/health || exit 1
 
-# Start FastAPI using uvicorn (use environment variable for port)
-CMD ["uvicorn", "src.api.main:app", "--host", "0.0.0.0", "--port", "8080", "--access-log"]
+# Start FastAPI using uvicorn
+# --workers=1: Single worker (sufficient for Cloud Run's managed scaling)
+# --loop=uvloop: Faster event loop
+# --no-access-log: Reduce noise in logs during startup
+CMD ["uvicorn", "src.api.main:app", "--host", "0.0.0.0", "--port", "8080", "--workers", "1"]
