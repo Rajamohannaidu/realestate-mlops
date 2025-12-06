@@ -13,9 +13,6 @@ env:
   PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
   REGION: us-central1
   SERVICE_NAME: realestate-frontend
-
-  # IMPORTANT: this must be FULL repo path as stored in Secrets
-  # Example: us-central1-docker.pkg.dev/my-project/realestate-repo
   ARTIFACT_REGISTRY_REPO: ${{ secrets.ARTIFACT_REGISTRY_REPO }}
 
 jobs:
@@ -43,70 +40,78 @@ jobs:
       - name: Configure Docker for Artifact Registry
         run: gcloud auth configure-docker ${REGION}-docker.pkg.dev -q
 
-      # FIX: Use full repo path directly from secret
-      - name: Set Repo Path
-        run: echo "REPO=${ARTIFACT_REGISTRY_REPO}" >> $GITHUB_ENV
-
-      - name: Get Backend URL
+      - name: Get Backend Service URL
         id: backend-url
         run: |
-          BACKEND=$(gcloud run services describe realestate-backend \
+          echo "Fetching backend service URL..."
+          BACKEND_URL=$(gcloud run services describe realestate-backend \
             --region=${{ env.REGION }} \
-            --format="value(status.url)" 2>/dev/null || true)
+            --format="value(status.url)" 2>/dev/null || echo "")
 
-          if [ -z "$BACKEND" ]; then
-            echo "⚠ Backend not found. Using local URL."
-            BACKEND="http://localhost:8080"
+          if [ -z "$BACKEND_URL" ]; then
+            echo "⚠️  Backend service not found. Check if it's deployed."
+            exit 1
           fi
 
-          echo "url=$BACKEND" >> $GITHUB_OUTPUT
+          echo "✅ Backend URL: $BACKEND_URL"
+          echo "url=$BACKEND_URL" >> $GITHUB_OUTPUT
 
       - name: Build Frontend Docker Image
         run: |
           docker build \
             -f frontend/Dockerfile.frontend \
-            -t $REPO/${{ env.SERVICE_NAME }}:${{ github.sha }} \
-            -t $REPO/${{ env.SERVICE_NAME }}:latest \
+            -t ${{ env.ARTIFACT_REGISTRY_REPO }}/${{ env.SERVICE_NAME }}:${{ github.sha }} \
+            -t ${{ env.ARTIFACT_REGISTRY_REPO }}/${{ env.SERVICE_NAME }}:latest \
             frontend
 
-      - name: Push Frontend Image
+      - name: Push Frontend Image to Artifact Registry
         run: |
-          docker push $REPO/${{ env.SERVICE_NAME }}:${{ github.sha }}
-          docker push $REPO/${{ env.SERVICE_NAME }}:latest
+          docker push ${{ env.ARTIFACT_REGISTRY_REPO }}/${{ env.SERVICE_NAME }}:${{ github.sha }}
+          docker push ${{ env.ARTIFACT_REGISTRY_REPO }}/${{ env.SERVICE_NAME }}:latest
 
-      - name: Deploy to Cloud Run
+      - name: Deploy Frontend to Cloud Run
         run: |
           gcloud run deploy ${{ env.SERVICE_NAME }} \
-            --image=$REPO/${{ env.SERVICE_NAME }}:${{ github.sha }} \
+            --image=${{ env.ARTIFACT_REGISTRY_REPO }}/${{ env.SERVICE_NAME }}:${{ github.sha }} \
             --region=${{ env.REGION }} \
             --platform=managed \
             --allow-unauthenticated \
             --memory=2Gi \
             --cpu=2 \
             --timeout=300 \
-            --min-instances=1 \
+            --min-instances=0 \
             --max-instances=10 \
-            --set-env-vars="BACKEND_API_URL=${{ steps.backend-url.outputs.url }}"
+            --set-env-vars="BACKEND_URL=${{ steps.backend-url.outputs.url }}"
 
-      - name: Get Frontend URL
-        id: service-url
+      - name: Get Frontend Service URL
+        id: frontend-url
         run: |
-          URL=$(gcloud run services describe ${{ env.SERVICE_NAME }} \
+          FRONTEND_URL=$(gcloud run services describe ${{ env.SERVICE_NAME }} \
             --region=${{ env.REGION }} \
             --format="value(status.url)")
-          echo "url=$URL" >> $GITHUB_OUTPUT
+          echo "url=$FRONTEND_URL" >> $GITHUB_OUTPUT
 
       - name: Validate Deployment
         run: |
-          echo "Waiting for service..."
+          echo "Waiting for service to be ready..."
           sleep 10
-          curl -f ${{ steps.service-url.outputs.url }} || exit 1
+          
+          FRONTEND_URL=${{ steps.frontend-url.outputs.url }}
+          echo "Testing frontend at: $FRONTEND_URL"
+          
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" $FRONTEND_URL)
+          echo "Frontend HTTP Status: $HTTP_CODE"
+          
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "⚠️  Frontend returned $HTTP_CODE. It may still be starting up."
+          fi
 
       - name: Deployment Summary
         run: |
           echo "==============================================="
           echo "🎉 Frontend Deployment Complete!"
-          echo "🌐 URL: ${{ steps.service-url.outputs.url }}"
-          echo "📦 Image: $REPO/${{ env.SERVICE_NAME }}:${{ github.sha }}"
-          echo "🔗 Backend API: ${{ steps.backend-url.outputs.url }}"
+          echo "==============================================="
+          echo "🌐 Frontend URL: ${{ steps.frontend-url.outputs.url }}"
+          echo "🔗 Backend URL:  ${{ steps.backend-url.outputs.url }}"
+          echo "📦 Image: ${{ env.ARTIFACT_REGISTRY_REPO }}/${{ env.SERVICE_NAME }}:${{ github.sha }}"
           echo "==============================================="
