@@ -1,9 +1,10 @@
 name: Deploy Services - Cloud Run
 
 on:
-  workflow_run:
-    workflows: ["Deploy - Terraform"]
-    types: [completed]
+  push:
+    branches: [ main ]
+    paths:
+      - ".github/workflows/deploy-services.yml"
 
 permissions:
   contents: read

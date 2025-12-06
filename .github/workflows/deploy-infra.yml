@@ -2,7 +2,10 @@ name: Deploy - Terraform
 
 on:
   push:
-    branches: [ main ]
+    branches: [ "main" ]
+    paths:
+      - "infrastructure/**"
+      - ".github/workflows/deploy-infra.yml"
   workflow_dispatch:
 
 permissions:
