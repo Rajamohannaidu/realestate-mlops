@@ -9,9 +9,10 @@ on:
   workflow_dispatch:
 
 env:
-  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  PROJECT_ID: academic-atlas-475811-c5
   REGION: us-central1
   SERVICE_NAME: realestate-backend
+  GCS_BUCKET: academic-atlas-475811-c5-ml-models
   ARTIFACT_REGISTRY_REPO: ${{ secrets.ARTIFACT_REGISTRY_REPO }}
 
 permissions:
@@ -53,10 +54,6 @@ jobs:
           docker push ${ARTIFACT_REGISTRY_REPO}/realestate-backend:${{ github.sha }}
           docker push ${ARTIFACT_REGISTRY_REPO}/realestate-backend:latest
 
-      - name: Set GCS Bucket Name
-        run: |
-          echo "GCS_BUCKET_NAME=${{ env.PROJECT_ID }}-ml-models" >> $GITHUB_ENV
-
       - name: Deploy to Cloud Run
         run: |
           gcloud run deploy ${SERVICE_NAME} \
@@ -69,35 +66,28 @@ jobs:
             --timeout=600 \
             --min-instances=0 \
             --max-instances=10 \
-            --set-env-vars="GCS_BUCKET_NAME=${GCS_BUCKET_NAME},GCS_MODEL_PATH=models/latest,ENVIRONMENT=production,ALLOW_STARTUP_WITHOUT_MODELS=false" \
+            --set-env-vars="GCS_BUCKET_NAME=${GCS_BUCKET},GCS_MODEL_PATH=models/latest,ENVIRONMENT=production,ALLOW_STARTUP_WITHOUT_MODELS=false" \
             --set-secrets="GROQ_API_KEY=groq-api-key:latest"
 
       - name: Verify Deployment
         run: |
           echo "Waiting for service to be ready..."
-          sleep 10
+          sleep 15
           SERVICE_URL=$(gcloud run services describe ${SERVICE_NAME} --region=${REGION} --format='value(status.url)')
           echo "Service URL: $SERVICE_URL"
           
           # Test health endpoint
           echo "Testing /health endpoint..."
-          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" ${SERVICE_URL}/health)
-          echo "Health endpoint: $HTTP_CODE"
+          curl -v ${SERVICE_URL}/health 2>&1 | grep -E "< HTTP|healthy" || echo "Health check failed"
           
-          # Test ready endpoint
-          echo "Testing /ready endpoint..."
-          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" ${SERVICE_URL}/ready)
-          echo "Ready endpoint: $HTTP_CODE"
-          
-          # Get model status
-          echo "Getting model status..."
-          curl -s ${SERVICE_URL}/models/status | head -20
+          # Get root endpoint
+          echo "Testing root endpoint..."
+          curl -s ${SERVICE_URL}/ | head -50
 
       - name: Show Deployment Logs
         if: failure()
         run: |
           echo "=== Recent Cloud Run Logs ==="
           gcloud logging read "resource.type=cloud_run_revision AND resource.labels.service_name=${SERVICE_NAME}" \
-            --region=${REGION} \
-            --limit=50 \
-            --format=text 2>/dev/null || echo "Could not retrieve logs"
+            --limit=100 \
+            --format=text 2>/dev/null | head -50 || echo "Could not retrieve logs"
