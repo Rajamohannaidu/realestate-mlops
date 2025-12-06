@@ -1,4 +1,4 @@
-# src/data_preprocessing.py
+# src/data_preprocessing.py - FIXED VERSION
 
 import pandas as pd
 import numpy as np
@@ -62,6 +62,25 @@ class RealEstateDataPreprocessor:
     
     def prepare_features(self, df, target_col='price', test_size=0.2):
         """Prepare features and target for modeling"""
+        df = df.copy()
+        
+        # Ensure target column exists
+        if target_col not in df.columns:
+            raise ValueError(f"Target column '{target_col}' not found. Available: {list(df.columns)}")
+        
+        # Encode categorical columns
+        categorical_cols = df.select_dtypes(include=['object']).columns.tolist()
+        if target_col in categorical_cols:
+            categorical_cols.remove(target_col)
+        
+        print(f"Encoding categorical columns: {categorical_cols}")
+        for col in categorical_cols:
+            if col in df.columns:
+                le = LabelEncoder()
+                df[col] = le.fit_transform(df[col].astype(str))
+                self.label_encoders[col] = le
+                print(f"  ✓ Encoded {col}")
+        
         # Separate features and target
         X = df.drop(columns=[target_col])
         y = df[target_col]
@@ -81,21 +100,37 @@ class RealEstateDataPreprocessor:
         return X_train, X_test, y_train, y_test
     
     def process_housing_data(self, df):
-        """Process the Housing.csv dataset with specific transformations"""
+        """
+        Process the Housing.csv dataset with specific transformations
+        Handles case-insensitive column names
+        """
+        df = df.copy()
         
-        # Convert yes/no columns to binary
+        # Normalize column names to lowercase
+        df.columns = df.columns.str.lower()
+        
+        # Convert yes/no columns to binary (case-insensitive)
         binary_columns = ['mainroad', 'guestroom', 'basement', 'hotwaterheating', 
                          'airconditioning', 'prefarea']
         
         for col in binary_columns:
-            df[col] = df[col].map({'yes': 1, 'no': 0})
+            if col in df.columns:
+                # Convert to lowercase and map
+                df[col] = df[col].str.lower().map({'yes': 1, 'no': 0})
+                print(f"✓ Converted {col} to binary")
+            else:
+                print(f"⚠️  Column '{col}' not found. Skipping...")
         
-        # Map furnishing status to numeric
-        df['furnishingstatus'] = df['furnishingstatus'].map({
-            'furnished': 2,
-            'semi-furnished': 1,
-            'unfurnished': 0
-        })
+        # Map furnishing status to numeric (case-insensitive)
+        if 'furnishingstatus' in df.columns:
+            df['furnishingstatus'] = df['furnishingstatus'].str.lower().map({
+                'furnished': 2,
+                'semi-furnished': 1,
+                'unfurnished': 0
+            })
+            print(f"✓ Converted furnishingstatus to numeric")
+        else:
+            print(f"⚠️  Column 'furnishingstatus' not found. Skipping...")
         
         return df
     
@@ -104,37 +139,23 @@ class RealEstateDataPreprocessor:
         np.random.seed(42)
         
         data = {
-            'area': np.random.randint(500, 5000, n_samples),
+            'price': np.random.uniform(1000000, 15000000, n_samples),
+            'area': np.random.uniform(1500, 12000, n_samples),
             'bedrooms': np.random.randint(1, 6, n_samples),
             'bathrooms': np.random.randint(1, 4, n_samples),
-            'year_built': np.random.randint(1980, 2024, n_samples),
-            'location': np.random.choice(['Urban', 'Suburban', 'Rural'], n_samples),
-            'property_type': np.random.choice(['Apartment', 'House', 'Condo', 'Villa'], n_samples),
-            'parking_spaces': np.random.randint(0, 4, n_samples),
-            'amenities_score': np.random.randint(1, 11, n_samples),
+            'stories': np.random.randint(1, 4, n_samples),
+            'mainroad': np.random.choice(['yes', 'no'], n_samples),
+            'guestroom': np.random.choice(['yes', 'no'], n_samples),
+            'basement': np.random.choice(['yes', 'no'], n_samples),
+            'hotwaterheating': np.random.choice(['yes', 'no'], n_samples),
+            'airconditioning': np.random.choice(['yes', 'no'], n_samples),
+            'parking': np.random.randint(0, 4, n_samples),
+            'prefarea': np.random.choice(['yes', 'no'], n_samples),
+            'furnishingstatus': np.random.choice(['furnished', 'semi-furnished', 'unfurnished'], n_samples)
         }
         
-        df = pd.DataFrame(data)
-        
-        # Generate price based on features
-        base_price = (
-            df['area'] * 150 + 
-            df['bedrooms'] * 50000 + 
-            df['bathrooms'] * 30000 + 
-            (2025 - df['year_built']) * -2000 +
-            df['parking_spaces'] * 20000 +
-            df['amenities_score'] * 10000
-        )
-        
-        # Add location multiplier
-        location_multiplier = df['location'].map({
-            'Urban': 1.5, 'Suburban': 1.2, 'Rural': 0.8
-        })
-        
-        df['price'] = base_price * location_multiplier + np.random.normal(0, 50000, n_samples)
-        df['price'] = df['price'].clip(lower=100000)
-        
-        return df
+        return pd.DataFrame(data)
+
 
 # Example usage
 if __name__ == "__main__":
@@ -143,7 +164,8 @@ if __name__ == "__main__":
     # Load the actual Housing.csv file
     try:
         df = preprocessor.load_data('Housing.csv')
-        print(f"Loaded Housing.csv: {len(df)} records")
+        print(f"✓ Loaded Housing.csv: {len(df)} records")
+        print(f"  Columns: {list(df.columns)}")
         
         # Process housing-specific columns
         df = preprocessor.process_housing_data(df)
@@ -157,12 +179,6 @@ if __name__ == "__main__":
         df = preprocessor.feature_engineering(df)
         print(f"✓ Feature engineering complete: {df.shape[1]} features")
         
-        # Encode categorical if any remain
-        categorical_cols = [col for col in df.columns if df[col].dtype == 'object' and col != 'price']
-        if categorical_cols:
-            df = preprocessor.encode_categorical(df, categorical_cols)
-            print(f"✓ Encoded categorical columns: {categorical_cols}")
-        
         # Prepare for modeling
         X_train, X_test, y_train, y_test = preprocessor.prepare_features(df)
         
@@ -170,12 +186,6 @@ if __name__ == "__main__":
         print(f"✓ Test set: {X_test.shape}")
         print(f"✓ Features: {list(preprocessor.feature_names)}")
         
-        # Save processed data
-        df.to_csv('data/processed/housing_processed.csv', index=False)
-        print("\n✓ Saved processed data to data/processed/housing_processed.csv")
-        
     except FileNotFoundError:
-        print("Housing.csv not found. Creating sample dataset...")
-        df = preprocessor.create_sample_dataset(1000)
-        df.to_csv('data/sample_data.csv', index=False)
-        print("✓ Sample dataset created at data/sample_data.csv")
+        print("❌ Housing.csv not found.")
+        print("Please place Housing.csv in the same directory as this script")

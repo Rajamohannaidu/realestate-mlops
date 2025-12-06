@@ -1,13 +1,7 @@
-# ============================================================================
-# GCP TRAINING WRAPPER - Wraps Your Existing Training Pipeline
-# ============================================================================
-# PURPOSE: Adds GCP integration to your existing model_training.py
-# FEATURES: 
-#   - Uses your existing RealEstateDataPreprocessor
-#   - Uses your existing RealEstatePredictiveModels (all 7 models)
-#   - Uploads trained models to Google Cloud Storage
-#   - Saves metadata for production deployment
-# ============================================================================
+"""
+GCP TRAINING WRAPPER - Fixed Version
+Wraps your existing training pipeline with proper data handling
+"""
 
 import pandas as pd
 import numpy as np
@@ -19,10 +13,8 @@ from datetime import datetime
 from google.cloud import storage
 import logging
 
-# Add current directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-# Import your existing modules (no changes needed to them!)
 from data_preprocessing import RealEstateDataPreprocessor
 from predictive_models import RealEstatePredictiveModels
 
@@ -33,17 +25,9 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 class GCPModelTrainer:
-    """
-    Wrapper that adds GCP functionality to your existing training pipeline
-    """
+    """Wrapper that adds GCP functionality to your existing training pipeline"""
     
     def __init__(self, data_path='data/Housing.csv'):
-        """
-        Initialize trainer with your existing components
-        
-        Args:
-            data_path: Path to your Housing.csv or other training data
-        """
         self.data_path = data_path
         self.preprocessor = RealEstateDataPreprocessor()
         self.models = RealEstatePredictiveModels()
@@ -53,68 +37,84 @@ class GCPModelTrainer:
         logger.info(f"Data path: {data_path}")
     
     def train_all_models(self):
-        """
-        Execute complete training pipeline using YOUR existing code
-        This calls your original training logic - no changes needed!
-        """
+        """Execute complete training pipeline"""
+        
         logger.info("="*70)
         logger.info("REAL ESTATE MODEL TRAINING - GCP VERSION")
         logger.info("="*70)
         
         # Step 1: Load Data
-        logger.info("\n Step 1: Loading data...")
+        logger.info("\nStep 1: Loading data...")
         if not os.path.exists(self.data_path):
-            logger.warning("Data file not found. Creating sample dataset...")
-            df = self.preprocessor.create_sample_dataset(n_samples=1000)
-            os.makedirs('data', exist_ok=True)
-            df.to_csv(self.data_path, index=False)
-            logger.info(f"✓ Sample dataset created: {self.data_path}")
+            logger.error(f"❌ Data file not found: {self.data_path}")
+            logger.error("Please provide the Housing.csv file")
+            raise FileNotFoundError(f"Data file not found: {self.data_path}")
         else:
-            df = self.preprocessor.load_data(self.data_path)
+            df = pd.read_csv(self.data_path)
             logger.info(f"✓ Data loaded: {len(df)} records")
         
-        # Step 2: Preprocess using YOUR existing pipeline
-        logger.info("\n Step 2: Preprocessing data...")
-        df_clean = self.preprocessor.clean_data(df)
-        logger.info(f"✓ Data cleaned: {len(df_clean)} records")
+        logger.info(f"✓ Columns: {list(df.columns)}")
+        logger.info(f"✓ Shape: {df.shape}")
         
-        # Step 3: Process Housing.csv specific format
-        logger.info("\n Step 3: Processing Housing.csv format...")
-        df_processed = self.preprocessor.process_housing_data(df_clean)
+        # Step 2: Process Housing.csv format
+        logger.info("\nStep 2: Processing Housing.csv format...")
+        df_processed = self.preprocessor.process_housing_data(df)
         logger.info(f"✓ Housing data processed: {df_processed.shape}")
         
-        # Step 4: Prepare features using YOUR existing method
-        logger.info("\n Step 4: Preparing features...")
-        X_train, X_test, y_train, y_test = self.preprocessor.prepare_features(
-            df_processed, 
-            target='price'
-        )
+        # Step 3: Prepare features
+        logger.info("\nStep 3: Preparing features...")
+        X_train, X_test, y_train, y_test = self.preprocessor.prepare_features(df_processed)
         logger.info(f"✓ Training set: {X_train.shape}")
         logger.info(f"✓ Test set: {X_test.shape}")
         
-        # Step 5: Train ALL 7 models using YOUR existing method
+        # Step 4: Train ALL models
         logger.info("\n" + "="*70)
-        logger.info(" Step 5: Training all models...")
+        logger.info("Step 4: Training all models...")
         logger.info("="*70)
         
-        # This calls YOUR train_all_models method - trains all 7 models!
         self.results = self.models.train_all_models(
             X_train, y_train, 
             X_test, y_test
         )
         
-        # Display results
         self._log_results()
-        
         return self.results
     
+    def _create_housing_sample_dataset(self, n_samples=545):
+        """
+        Create a sample Housing dataset with correct column names
+        Matches the actual Housing.csv format your models expect
+        """
+        logger.info(f"Generating {n_samples} sample properties...")
+        
+        np.random.seed(42)
+        
+        data = {
+            'price': np.random.uniform(1000000, 15000000, n_samples),
+            'area': np.random.uniform(1500, 12000, n_samples),
+            'bedrooms': np.random.randint(1, 6, n_samples),
+            'bathrooms': np.random.randint(1, 4, n_samples),
+            'stories': np.random.randint(1, 4, n_samples),
+            'mainroad': np.random.choice(['yes', 'no'], n_samples),
+            'guestroom': np.random.choice(['yes', 'no'], n_samples),
+            'basement': np.random.choice(['yes', 'no'], n_samples),
+            'hotwaterheating': np.random.choice(['yes', 'no'], n_samples),
+            'airconditioning': np.random.choice(['yes', 'no'], n_samples),
+            'parking': np.random.randint(0, 4, n_samples),
+            'prefarea': np.random.choice(['yes', 'no'], n_samples),
+            'furnishingstatus': np.random.choice(['furnished', 'semi-furnished', 'unfurnished'], n_samples)
+        }
+        
+        df = pd.DataFrame(data)
+        logger.info(f"✓ Sample dataset created with columns: {list(df.columns)}")
+        return df
+    
     def _log_results(self):
-        """Log training results in a nice format"""
+        """Log training results"""
         logger.info("\n" + "="*70)
         logger.info("TRAINING RESULTS SUMMARY")
         logger.info("="*70)
         
-        # Sort models by R² score
         sorted_results = sorted(
             self.results.items(), 
             key=lambda x: x[1]['r2_score'], 
@@ -131,30 +131,27 @@ class GCPModelTrainer:
         logger.info(f"\n{'='*70}")
         logger.info(f"BEST MODEL: {self.models.best_model_name.upper()}")
         logger.info(f"R² Score: {self.results[self.models.best_model_name]['r2_score']:.4f}")
+        logger.info(f"RMSE: ₹{self.results[self.models.best_model_name]['rmse']:,.2f}")
         logger.info(f"{'='*70}")
     
     def save_models_locally(self, path='models/saved_models'):
-        """
-        Save all trained models locally
+        """Save all trained models locally"""
         
-        Args:
-            path: Directory to save models
-        """
         os.makedirs(path, exist_ok=True)
-        
         logger.info(f"\nSaving models to: {path}")
         
-        # Save all 7 models using YOUR existing method
+        # Save all models
         self.models.save_models(path)
+        logger.info("✓ All models saved")
         
-        # Save preprocessor (needed for inference)
+        # Save preprocessor
         joblib.dump(
             self.preprocessor, 
             os.path.join(path, 'preprocessor.pkl')
         )
         logger.info("✓ Preprocessor saved")
         
-        # Save metadata with all model metrics
+        # Save metadata
         metadata = {
             'best_model': self.models.best_model_name,
             'trained_at': datetime.now().isoformat(),
@@ -167,11 +164,14 @@ class GCPModelTrainer:
                 }
                 for model_name, metrics in self.results.items()
             },
-            'feature_names': list(self.preprocessor.feature_names) 
-                if hasattr(self.preprocessor, 'feature_names') 
-                else [],
+            'features': [
+                'area', 'bedrooms', 'bathrooms', 'stories',
+                'mainroad', 'guestroom', 'basement', 'hotwaterheating',
+                'airconditioning', 'parking', 'prefarea', 'furnishingstatus'
+            ],
             'model_count': len(self.results),
-            'models_included': list(self.results.keys())
+            'models_included': list(self.results.keys()),
+            'version': '1.0.0'
         }
         
         with open(os.path.join(path, 'metadata.json'), 'w') as f:
@@ -182,15 +182,9 @@ class GCPModelTrainer:
         
         return metadata
     
-    def upload_to_gcs(self, bucket_name, local_path, gcs_path):
-        """
-        Upload trained models to Google Cloud Storage
+    def upload_to_gcs(self, bucket_name, local_path='models/saved_models', gcs_path='models/latest'):
+        """Upload trained models to Google Cloud Storage"""
         
-        Args:
-            bucket_name: GCS bucket name (e.g., 'your-project-ml-models')
-            local_path: Local directory with models
-            gcs_path: GCS path prefix (e.g., 'models/latest')
-        """
         logger.info(f"\nUploading models to GCS...")
         logger.info(f"Bucket: gs://{bucket_name}/{gcs_path}/")
         
@@ -198,7 +192,11 @@ class GCPModelTrainer:
             storage_client = storage.Client()
             bucket = storage_client.bucket(bucket_name)
             
-            # Upload all files in the directory
+            if not os.path.exists(local_path):
+                logger.error(f"Local path does not exist: {local_path}")
+                return False
+            
+            # Upload all files
             for filename in os.listdir(local_path):
                 local_file = os.path.join(local_path, filename)
                 
@@ -209,15 +207,15 @@ class GCPModelTrainer:
             
             logger.info(f"\n✓ Upload complete!")
             logger.info(f"Models available at: gs://{bucket_name}/{gcs_path}/")
-            
+            return True
+        
         except Exception as e:
             logger.error(f"Error uploading to GCS: {e}")
             raise
 
 def main():
-    """
-    Main training execution with GCP integration
-    """
+    """Main training execution"""
+    
     import argparse
     
     parser = argparse.ArgumentParser(
@@ -233,43 +231,39 @@ def main():
         '--gcs-bucket', 
         type=str, 
         default=None,
-        help='GCS bucket name for model storage (e.g., your-project-ml-models)'
+        help='GCS bucket name for model storage'
     )
     parser.add_argument(
         '--gcs-path', 
         type=str, 
         default='models/latest',
-        help='GCS path for models (default: models/latest)'
+        help='GCS path for models'
     )
     
     args = parser.parse_args()
     
-    # Initialize trainer
+    # Initialize and train
     trainer = GCPModelTrainer(data_path=args.data)
-    
-    # Train all models
     logger.info("Starting training pipeline...")
     results = trainer.train_all_models()
     
-    # Save models locally
+    # Save locally
     local_path = 'models/saved_models'
     metadata = trainer.save_models_locally(local_path)
     
-    # Upload to GCS if bucket specified
+    # Upload to GCS
     if args.gcs_bucket:
         trainer.upload_to_gcs(args.gcs_bucket, local_path, args.gcs_path)
     else:
         logger.warning("\nNo GCS bucket specified. Models saved locally only.")
-        logger.warning("To upload to GCS, use: --gcs-bucket YOUR_BUCKET_NAME")
+        logger.warning("To upload: --gcs-bucket YOUR_BUCKET_NAME")
     
     logger.info("\n" + "="*70)
-    logger.info("TRAINING PIPELINE COMPLETED SUCCESSFULLY!")
+    logger.info("✅ TRAINING COMPLETED!")
     logger.info("="*70)
-    logger.info(f"\nModels trained: {len(results)}")
-    logger.info(f"Best model: {metadata['best_model']}")
-    logger.info(f"Best R² score: {results[metadata['best_model']]['r2_score']:.4f}")
-    
-    return results
+    logger.info(f"Models: {len(results)} trained")
+    logger.info(f"Best: {metadata['best_model']}")
+    logger.info(f"R² Score: {results[metadata['best_model']]['r2_score']:.4f}")
 
 if __name__ == '__main__':
     main()

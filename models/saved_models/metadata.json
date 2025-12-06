@@ -1,0 +1,73 @@
+{
+  "best_model": "gradient_boosting",
+  "trained_at": "2025-12-06T08:31:27.484524",
+  "results": {
+    "linear_regression": {
+      "rmse": 84854.59304800202,
+      "mae": 69139.86007813204,
+      "r2_score": 0.9281471551043532,
+      "mape": 11.210736482731967
+    },
+    "ridge": {
+      "rmse": 84822.65052155212,
+      "mae": 69168.46075829068,
+      "r2_score": 0.9282012412609824,
+      "mape": 11.203087709148974
+    },
+    "random_forest": {
+      "rmse": 73186.31770423433,
+      "mae": 58498.25810688797,
+      "r2_score": 0.9465493425730471,
+      "mape": 9.121215689958632
+    },
+    "gradient_boosting": {
+      "rmse": 60423.839854078564,
+      "mae": 48909.837122018784,
+      "r2_score": 0.9635657445188704,
+      "mape": 7.698425141633848
+    },
+    "xgboost": {
+      "rmse": 70917.04427172247,
+      "mae": 57875.91799222692,
+      "r2_score": 0.9498126215255305,
+      "mape": 8.970249219855233
+    },
+    "lightgbm": {
+      "rmse": 66081.97480902796,
+      "mae": 51466.857431379525,
+      "r2_score": 0.9564228037713912,
+      "mape": 7.999132585444142
+    },
+    "neural_network": {
+      "rmse": 83204.05548100852,
+      "mae": 64385.73958347374,
+      "r2_score": 0.9309152408461806,
+      "mape": 10.199540079397696
+    }
+  },
+  "features": [
+    "area",
+    "bedrooms",
+    "bathrooms",
+    "stories",
+    "mainroad",
+    "guestroom",
+    "basement",
+    "hotwaterheating",
+    "airconditioning",
+    "parking",
+    "prefarea",
+    "furnishingstatus"
+  ],
+  "model_count": 7,
+  "models_included": [
+    "linear_regression",
+    "ridge",
+    "random_forest",
+    "gradient_boosting",
+    "xgboost",
+    "lightgbm",
+    "neural_network"
+  ],
+  "version": "1.0.0"
+}
