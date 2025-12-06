@@ -329,7 +329,7 @@ resource "google_project_iam_member" "training_logging" {
   role    = "roles/logging.logWriter"
   member  = "serviceAccount:${google_service_account.training.email}"
 }
-
+/*
 # ============================================================================
 # CLOUD RUN - BACKEND SERVICE (FastAPI)
 # ============================================================================
@@ -611,4 +611,4 @@ resource "google_cloud_scheduler_job" "model_retraining" {
     google_cloud_run_service.backend
   ]
 }
-
+*/
